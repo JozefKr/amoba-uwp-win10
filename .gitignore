@@ -55,3 +55,8 @@ Azure / Cloud Service
 
 *.cscfg
 *.csdef
+
+(A .vs mappa belsejében lévõ SQLite3 fájlok kizárása, pl. db.lock, storage.ide-shm)
+.vs//*.lock
+.vs//.ide-shm
+.vs/**/.ide-wal
