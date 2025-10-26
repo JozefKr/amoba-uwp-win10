@@ -1,0 +1,51 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.36530.23
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Amoba", "Amoba\Amoba.csproj", "{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM = Debug|ARM
+		Debug|ARM64 = Debug|ARM64
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|ARM = Release|ARM
+		Release|ARM64 = Release|ARM64
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|ARM.ActiveCfg = Debug|ARM
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|ARM.Build.0 = Debug|ARM
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|ARM.Deploy.0 = Debug|ARM
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|ARM64.Build.0 = Debug|ARM64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|ARM64.Deploy.0 = Debug|ARM64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|x64.ActiveCfg = Debug|x64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|x64.Build.0 = Debug|x64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|x64.Deploy.0 = Debug|x64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|x86.ActiveCfg = Debug|x86
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|x86.Build.0 = Debug|x86
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Debug|x86.Deploy.0 = Debug|x86
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|ARM.ActiveCfg = Release|ARM
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|ARM.Build.0 = Release|ARM
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|ARM.Deploy.0 = Release|ARM
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|ARM64.ActiveCfg = Release|ARM64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|ARM64.Build.0 = Release|ARM64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|ARM64.Deploy.0 = Release|ARM64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|x64.ActiveCfg = Release|x64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|x64.Build.0 = Release|x64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|x64.Deploy.0 = Release|x64
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|x86.ActiveCfg = Release|x86
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|x86.Build.0 = Release|x86
+		{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}.Release|x86.Deploy.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E7B1BA33-407F-45BB-8F1C-0CE81E4CB90F}
+	EndGlobalSection
+EndGlobal
