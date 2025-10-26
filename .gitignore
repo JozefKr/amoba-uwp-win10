@@ -1,0 +1,57 @@
+Binaries for release and debug
+
+[Bb]in/
+[Oo]bj/
+
+Log files and Temp files
+
+[Tt]emp/
+*.[Tt]mp
+*.[Ll]og
+*.[Ss]wf
+
+Visual Studio user and cache files
+
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vshost.exe
+*.vshost.exe.config
+*.cache
+*.pdf
+
+NuGet files
+
+*.nupkg
+
+Exclude packages directory (if it exists outside the solution)
+
+packages/
+
+Resharper és más IDE fájlok
+
+*.resharper
+*.vspscc
+*.vssscc
+*.bak
+.old
+_ReSharper/
+
+Visual Studio Code
+
+.vscode/
+
+Build and Deployment
+
+[Dd]rop/
+[Pp]ublish/
+
+Local settings file
+
+localsettings.json
+
+Azure / Cloud Service
+
+*.cscfg
+*.csdef
