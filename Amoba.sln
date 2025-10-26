@@ -5,6 +5,11 @@ VisualStudioVersion = 15.0.36530.23
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Amoba", "Amoba\Amoba.csproj", "{FB23C3A2-000C-4A7D-89D8-05D4AAEC658C}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{5DA12639-190D-477B-8A4F-ACE6B8BB2ECD}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM = Debug|ARM
