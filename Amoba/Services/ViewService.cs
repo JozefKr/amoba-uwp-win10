@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Windows.UI.Xaml.Controls;
 using GalaSoft.MvvmLight;
 using Autofac;
+using Windows.UI.Xaml;
 
 namespace Amoba.Services
 {
@@ -47,9 +48,12 @@ namespace Amoba.Services
                 // 1. Feloldjuk a ViewModel példányát a DI konténeren keresztül
                 var viewModelInstance = container.Resolve<T>(parameters);
 
-                // 2. Navigálunk a Page-re, és a ViewModel-t adjuk át paraméterként.
-                // A Page-nek kell a DataContext-et beállítania az OnNavigatedTo metódusában.
-                rootFrame.Navigate(pageType, viewModelInstance);
+                // Ellenőrizzük, hogy az aktuális Page típusa azonos-e a cél Page-el (pl. GamePage)
+                if (rootFrame != null && rootFrame.CurrentSourcePageType != pageType)
+                {
+                    // Navigálás csak akkor, ha még nem vagyunk ezen az oldalon
+                    rootFrame.Navigate(pageType, viewModelInstance);
+                }
             }
             else throw new ArgumentException($"ViewModel type {typeof(T).Name} not registered.");
         }
@@ -57,24 +61,6 @@ namespace Amoba.Services
         public void OpenPage<T>(params NamedParameter[] parameters) where T : ViewModelBase
         {
             NavigateToView<T>(parameters);
-        }
-
-        public async void OpenDialog<T>(params NamedParameter[] parameters) where T : ViewModelBase
-        {
-            if (registrations.ContainsKey(typeof(T)))
-            {
-                var dialogType = registrations[typeof(T)];
-
-                // ContentDialog példányosítása (feltételezve, hogy a regisztrált View ContentDialog)
-                var dialog = (ContentDialog)Activator.CreateInstance(dialogType);
-
-                // DataContext beállítása a feloldott ViewModel-re
-                dialog.DataContext = container.Resolve<T>(parameters);
-
-                // Modális megjelenítés
-                await dialog.ShowAsync();
-            }
-            else throw new ArgumentException($"ViewModel type {typeof(T).Name} not registered for dialog.");
         }
     }
 }

@@ -1,14 +1,11 @@
-﻿<ContentDialog
-    x:Class="Amoba.Views.GameSizeDialog"
+﻿<Page
+    x:Class="Amoba.Views.GameSizePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    d:DesignWidth="525"
-    Title="Select game size."
-    IsPrimaryButtonEnabled="False"
-    IsSecondaryButtonEnabled="False">
+    d:DesignWidth="525">
 
     <Grid Width="450" Padding="0, 20, 0, 0">
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -39,4 +36,4 @@
                 Style="{StaticResource AccentButtonStyle}" />
         </StackPanel>
     </Grid>
-</ContentDialog>
+</Page>

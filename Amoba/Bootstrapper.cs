@@ -25,9 +25,10 @@ namespace Amoba
             // Regisztrálja az összes ViewModelBase-ből származó típust (beleértve a MainViewModel-t is)
             var currentAssembly = typeof(Bootstrapper).GetTypeInfo().Assembly;
 
-            // Regisztrálja az összes ViewModelBase-ből származó típust (beleértve a MainViewModel-t is)
-            builder.RegisterTypes(currentAssembly.GetTypes().Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase) && z.Name != "GameViewModel").ToArray());
-            builder.RegisterType<GameViewModel>().WithParameter(new NamedParameter("gameSize", "size"));
+            // Regisztrálja az ÖSSZES ViewModelBase-ből származó típust.
+            //builder.RegisterTypes(currentAssembly.GetTypes().Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase) && z.Name != "GameViewModel").ToArray());
+            //builder.RegisterType<GameViewModel>().WithParameter(new NamedParameter("boardSizeParam", "size"));
+            builder.RegisterTypes(currentAssembly.GetTypes().Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase)).ToArray());
 
             var container = builder.Build();
 
@@ -35,8 +36,8 @@ namespace Amoba
             var viewService = container.Resolve<IViewService>();
 
             viewService.RegisterPage(typeof(MainViewModel), typeof(MainPage));
+            viewService.RegisterPage(typeof(GameSizeViewModel), typeof(GameSizePage));
             viewService.RegisterPage(typeof(GameViewModel), typeof(GamePage));
-            viewService.RegisterPage(typeof(GameSizeViewModel), typeof(GameSizeDialog));
 
             return container;
         }

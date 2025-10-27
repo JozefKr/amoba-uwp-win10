@@ -1,6 +1,7 @@
-﻿using GalaSoft.MvvmLight;
+﻿using Amoba.Services;
+using Autofac;
+using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
-using GalaSoft.MvvmLight.Messaging;
 using System;
 using System.Windows.Input;
 
@@ -8,69 +9,51 @@ namespace Amoba.ViewModel
 {
     public class GameSizeViewModel : ViewModelBase
     {
-        // Ezzel hívjuk meg a ContentDialog.Hide() metódusát.
-        private readonly Action _closeDialogAction;
+        private readonly IViewService _viewService;
 
-        private ICommand selectSize;
-        private int selectedGameSize;
-        private bool enabled;
-
-        // A ContentDialog.xaml.cs a GetSelectedSize() metódusban ezt a property-t használja.
-        public int SelectedGameSize
+        // A DI-n keresztül megkapja a navigációs szolgáltatást.
+        public GameSizeViewModel(IViewService viewService)
         {
-            get => selectedGameSize;
-            // A Set metódus a GalaSoft.MvvmLight.ViewModelBase része.
-            private set => Set(ref selectedGameSize, value);
-        }
-
-        public bool Enabled
-        {
-            get { return enabled; }
-            set
-            {
-                // Használhatja a GalaSoft Set metódusát is, de a RaisePropertyChanged is működik.
-                enabled = value;
-                RaisePropertyChanged();
-            }
-        }
-
-        // ÚJ KONSTRUKTOR: Felveszi a bezárásért felelős Action-t.
-        public GameSizeViewModel(Action closeDialogAction)
-        {
-            // Eltároljuk a ContentDialog.Hide metódus hivatkozását.
-            _closeDialogAction = closeDialogAction;
+            _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
             Enabled = true;
-            // A selectSize parancs inicializálása
-            SelectSize = new RelayCommand<string>(SelectSizeMethod);
         }
 
-        // Megjegyzés: Az alapértelmezett, paraméter nélküli konstruktort eltávolítottam.
-
+        private ICommand _selectSize;
         public ICommand SelectSize
         {
             get
             {
-                // Már inicializálva van a konstruktorban.
-                return selectSize;
+                if (_selectSize == null)
+                    _selectSize = new RelayCommand<string>(SelectSizeMethod);
+                return _selectSize;
             }
-            private set
+        }
+
+        private bool _enabled;
+        public bool Enabled
+        {
+            get { return _enabled; }
+            set
             {
-                selectSize = value;
+                _enabled = value;
+                RaisePropertyChanged();
             }
         }
 
         private void SelectSizeMethod(string size)
         {
-            if (int.TryParse(size, out int selectedSize))
+            if (int.TryParse(size, out int boardSize) && boardSize > 0)
             {
-                // 1. Tároljuk a kiválasztott méretet
-                SelectedGameSize = selectedSize;
+                // A méret kiválasztása megtörtént.
+                // Most azonnal navigálunk a GameViewModel-re (GamePage).
 
-                // 2. Bezárjuk a ContentDialog-ot az átadott Action hívásával (ez hívja a Hide()-ot).
-                _closeDialogAction?.Invoke();
+                // Mivel a GameViewModel egy pozicionális paramétert (int gameSize) vár,
+                // a TypedParameter a legmegfelelőbb megoldás a DI-ben.
+                var param = new TypedParameter(typeof(int), boardSize);
 
-                // FONTOS: Az eredeti Messenger.Default.Send hívást eltávolítottam, 
-                // mivel a bezárás most már a ContentDialogResult.GetSelectedSize() útján történik.
+                // A ViewService.OpenPage feloldása mostantól a TypedParameter-t kapja meg.
+                // A paramétert egy tömbbe csomagoljuk, hogy a ViewService a megfelelő túlterhelést válassza.
+                _viewService.OpenPage<GameViewModel>(new NamedParameter("boardSizeParam", boardSize));
             }
         }
     }

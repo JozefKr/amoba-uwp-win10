@@ -2,7 +2,7 @@
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using System;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
 
@@ -10,68 +10,42 @@ namespace Amoba.ViewModel
 {
     public class GameViewModel : ViewModelBase
     {
-        private int gameSize;
-        private int windowWidth;
-
-        private int windowHeight;
-        private string title;
-
         private int player1Score;
         private int player2Score;
-
         private bool isPlayer1Turn;
         private bool isPlayer2Turn;
-
-        private List<Place> places;
-
+        private ObservableCollection<Place> places;
         private ICommand setImage;
+        private int boardSize;
 
-        public GameViewModel(int gameSize)
+        public int BoardSize
         {
-            this.gameSize = gameSize;
-            Places = new List<Place>();
-            for (int i = 0; i < Math.Pow(gameSize, 2); i++)
+            get => boardSize;
+            set => Set(ref boardSize, value);
+        }
+
+        public GameViewModel()
+        {
+            InitializeViewModel(3);
+        }
+
+        public GameViewModel(int boardSizeParam)
+        {
+            InitializeViewModel(boardSizeParam);
+        }
+
+        private void InitializeViewModel(int boardSizeParam)
+        {
+            this.BoardSize = boardSizeParam;
+            Places = new ObservableCollection<Place>();
+            for (int i = 0; i < Math.Pow(this.BoardSize, 2); i++)
             {
                 Places.Add(new Place() { Id = i, Type = null });
             }
-
-            switch (gameSize)
-            {
-                case 3:
-                    WindowWidth = 490;
-                    WindowHeight = 325;
-                    Title = "3x3 mode";
-                    break;
-                case 4:
-                    WindowWidth = 580;
-                    WindowHeight = 415;
-                    Title = "4x4 mode";
-                    break;
-                case 5:
-                    WindowWidth = 670;
-                    WindowHeight = 505;
-                    Title = "5x5 mode";
-                    break;
-            }
             IsPlayer1Turn = true;
-        }
-
-        public int WindowWidth
-        {
-            get { return windowWidth; }
-            set { windowWidth = value; RaisePropertyChanged(); }
-        }
-
-        public int WindowHeight
-        {
-            get { return windowHeight; }
-            set { windowHeight = value; RaisePropertyChanged(); }
-        }
-
-        public string Title
-        {
-            get { return title; }
-            set { title = value; RaisePropertyChanged(); }
+            IsPlayer2Turn = false;
+            Player1Score = 0;
+            Player2Score = 0;
         }
 
         public int Player2Score
@@ -98,9 +72,9 @@ namespace Amoba.ViewModel
             set { isPlayer2Turn = value; RaisePropertyChanged(); }
         }
 
-        public List<Place> Places
+        public ObservableCollection<Place> Places
         {
-            get { return places; }
+            get => places;
             set { places = value; RaisePropertyChanged(); }
         }
 
@@ -109,72 +83,106 @@ namespace Amoba.ViewModel
             get
             {
                 return setImage ??
-                    (setImage = new RelayCommand<Place>(SetImageMethod, p => { return p.IsEmpty; }));
+                    (setImage = new RelayCommand<Place>(SetImageMethod, p => { return p != null && p.IsEmpty; }));
             }
         }
 
         private void SetImageMethod(Place place)
         {
-            var pl = Places.Single(z => z.Id == place.Id);
+            //Single() helyett FirstOrDefault() használata biztonságosabb
+            var pl = Places.FirstOrDefault(z => z.Id == place.Id);
+            if (pl == null || !pl.IsEmpty) // Ellenőrizzük, hogy a mező létezik és üres-e
+            {
+                return; // Ha nem, ne csináljunk semmit
+            }
+
             pl.IsEmpty = false;
             pl.Type = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
 
             var winner = CheckWinner();
-            if (winner != -1 || Places.Where(z => !z.IsEmpty).Count() == Math.Pow(gameSize, 2))
+            //A tábla törlését külön metódusba szervezzük a jobb olvashatóságért
+            if (winner != -1 || Places.All(z => !z.IsEmpty)) // Használhatjuk az All()-t a tele tábla ellenőrzésére
             {
                 if (winner == 1) Player1Score++;
                 else if (winner == 2) Player2Score++;
 
-                Places.ForEach(z => { z.IsEmpty = true; z.Type = null; });
+                ResetBoard(); // Tábla törlése és újraindítás
+            }
+            else
+            {
+                ChangeTurn(); // Csak akkor váltunk kört, ha nincs vége a játéknak
             }
 
-            Places = new List<Place>(Places);
-            ChangeTurn();
+            // JAVÍTÁS: Ez a sor hibás volt, ObservableCollection-t nem lehet így frissíteni.
+            // Az ObservableCollection magától kezeli a UI frissítést, ha az elemei változnak (INotifyPropertyChanged),
+            // vagy ha elemeket adunk hozzá/törlünk.
+            // Places = new ObservableCollection<Place>(Places); // <-- TÖRÖLVE!
         }
+
+        // ÚJ Metódus: A tábla törlése és alaphelyzetbe állítása
+        private void ResetBoard()
+        {
+            // A Clear() helyett a foreach ciklus is működik, mert a Place implementálja az INotifyPropertyChanged-et
+            foreach (var item in Places)
+            {
+                item.IsEmpty = true;
+                item.Type = null;
+            }
+            // Opcionálisan: Kezdjen újra az első játékos
+            IsPlayer1Turn = true;
+            IsPlayer2Turn = false;
+        }
+
 
         private void ChangeTurn()
         {
-            if (IsPlayer1Turn) { IsPlayer1Turn = false; IsPlayer2Turn = true; }
-            else if (IsPlayer2Turn) { IsPlayer2Turn = false; IsPlayer1Turn = true; }
+            IsPlayer1Turn = !IsPlayer1Turn;
+            IsPlayer2Turn = !IsPlayer1Turn;
         }
 
         private int CheckWinner()
         {
             int winner = -1;
+            int n = BoardSize; // Egyszerűsítés
+            double nSquared = Math.Pow(n, 2);
 
-            // rows
-            for (int i = 0; i < Math.Pow(gameSize, 2); i += gameSize)
+            // Sorok ellenőrzése
+            for (int row = 0; row < n; row++)
             {
-                if (i % gameSize == 0)
-                {
-                    if (Places.FindAll(z => z.Id >= i && z.Id < i + gameSize).Where(z => z.Type == IconType.Circle).Count() == gameSize) winner = 2;
-                    if (Places.FindAll(z => z.Id >= i && z.Id < i + gameSize).Where(z => z.Type == IconType.Cross).Count() == gameSize) winner = 1;
-                }
+                var currentRow = Places.Skip(row * n).Take(n);
+                if (currentRow.All(p => p.Type == IconType.Circle)) return 2;
+                if (currentRow.All(p => p.Type == IconType.Cross)) return 1;
             }
 
-            // columns
-            for (int i = 0; i < gameSize; i++)
+            // Oszlopok ellenőrzése
+            for (int col = 0; col < n; col++)
             {
-                if (Places.FindAll(z => (z.Id - i) % gameSize == 0).Where(z => z.Type == IconType.Circle).Count() == gameSize) winner = 2;
-                if (Places.FindAll(z => (z.Id - i) % gameSize == 0).Where(z => z.Type == IconType.Cross).Count() == gameSize) winner = 1;
+                var currentCol = Places.Where((p, index) => index % n == col);
+                if (currentCol.All(p => p.Type == IconType.Circle)) return 2;
+                if (currentCol.All(p => p.Type == IconType.Cross)) return 1;
             }
 
-            // diagonal
-            var diagonal = new List<int>();
+            // Átlók ellenőrzése
+            var diag1 = Places.Where((p, index) => index % (n + 1) == 0);
+            if (diag1.All(p => p.Type == IconType.Circle)) return 2;
+            if (diag1.All(p => p.Type == IconType.Cross)) return 1;
 
-            for (int i = 0; i < Math.Pow(gameSize, 2); i += gameSize + 1) diagonal.Add(i);
+            // Csak négyzetes táblán van értelme a másik átlónak
+            if (n > 1)
+            {
+                var diag2 = Places.Where((p, index) => index != 0 && index != nSquared - 1 && index % (n - 1) == 0);
+                // Korrekció: Az első és utolsó elem kimarad a fenti logikából n>2 esetén, külön kell ellenőrizni,
+                // vagy a Places[n-1] ... Places[nSquared-n] elemeket kell nézni (n-1)-es lépésközzel.
+                // Egyszerűbb LINQ az átlóhoz:
+                var diag2Indices = Enumerable.Range(0, n).Select(i => (i + 1) * (n - 1));
+                var diag2Correct = Places.Where((p, index) => diag2Indices.Contains(index));
 
-            if (Places.FindAll(z => diagonal.Contains(z.Id)).Where(z => z.Type == IconType.Circle).Count() == gameSize) winner = 2;
-            if (Places.FindAll(z => diagonal.Contains(z.Id)).Where(z => z.Type == IconType.Cross).Count() == gameSize) winner = 1;
+                if (diag2Correct.All(p => p.Type == IconType.Circle)) return 2;
+                if (diag2Correct.All(p => p.Type == IconType.Cross)) return 1;
+            }
 
-            diagonal.Clear();
 
-            for (int i = gameSize - 1; i < Math.Pow(gameSize, 2) - 1; i += gameSize - 1) diagonal.Add(i);
-
-            if (Places.FindAll(z => diagonal.Contains(z.Id)).Where(z => z.Type == IconType.Circle).Count() == gameSize) winner = 2;
-            if (Places.FindAll(z => diagonal.Contains(z.Id)).Where(z => z.Type == IconType.Cross).Count() == gameSize) winner = 1;
-
-            return winner;
+            return winner; // -1, ha nincs győztes
         }
     }
 }

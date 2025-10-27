@@ -4,17 +4,70 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    
-    xmlns:conv="using:Amoba.Converters"  
-    xmlns:local="using:Amoba.Views"
-    
+    xmlns:conv="using:Amoba.Converters"    
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+    x:Name="PageRoot">
 
     <Page.Resources>
         <!-- Konverterek regisztrálása -->
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions" />
         <conv:TurnToColorConverter x:Key="turnToColor" />
+
+        <!-- VÉGLEGES Stílus a játéktábla gombjaihoz ControlTemplate-tel -->
+        <Style x:Key="GameBoardButtonStyle" TargetType="Button">
+            <Setter Property="BorderBrush" Value="Black"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+            <Setter Property="Margin" Value="5"/>
+            <!-- Explicit háttér a Style Setter-ben, ez lesz az alap, ha nincs kép -->
+            <Setter Property="Background" Value="LightGray"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <!-- A Border adja a hátteret és keretet -->
+                        <Border x:Name="RootBorder" 
+                                Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0:0:0.1" To="1.0" />
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="PointerOver">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0:0:0.1" To="0.5" />
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0:0:0.1" To="0.8" />
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#33999999"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0" To="0.5"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <!-- Az Image elem MOST MÁR ITT VAN, a Border-en BELÜL -->
+                            <!-- Ez jeleníti meg az X/O képet, ha az Image nem null -->
+                            <Image Source="{Binding Image}" Stretch="Uniform" Margin="5"/>
+                            <!-- A ContentPresenter itt már nem szükséges, ha csak képet jelenítünk meg -->
+                            <!-- <ContentPresenter ... /> -->
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Page.Resources>
     <Grid>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -24,14 +77,14 @@
                 ItemsSource="{Binding Places}" 
                 Background="#808080" 
  
-                Width="{Binding Places, Converter={StaticResource placesToDimensions}}" 
-                Height="{Binding Places, Converter={StaticResource placesToDimensions}}">
+                Width="{Binding BoardSize, Converter={StaticResource placesToDimensions}}" 
+                Height="{Binding BoardSize, Converter={StaticResource placesToDimensions}}">
 
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <ItemsWrapGrid 
                             Orientation="Horizontal" 
-                            MaximumRowsOrColumns="{Binding GameSize}" />
+                            MaximumRowsOrColumns="{Binding BoardSize}" />
                         <!-- A MaximumRowsOrColumns beállítása szükséges a rács méretéhez -->
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
@@ -39,18 +92,10 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Button 
-                            Width="80" Height="80" Margin="5" 
-                            HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-                            
+                            Width="80" Height="80"
+                            Style="{StaticResource GameBoardButtonStyle}"
                             Command="{Binding DataContext.SetImage, ElementName=PageRoot}"
-                            CommandParameter="{Binding}"
-                            
-                            Style="{StaticResource DefaultButtonStyle}">
-
-                            <!-- Eredeti Button.Background, ami ImageBrush-t használ -->
-                            <Button.Background>
-                                <ImageBrush ImageSource="{Binding Image}" Stretch="Uniform" />
-                            </Button.Background>
+                            CommandParameter="{Binding}">
                             <Grid>
                             </Grid>
                         </Button>

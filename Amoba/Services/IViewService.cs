@@ -1,4 +1,5 @@
 ﻿using Autofac;
+using Autofac.Core;
 using GalaSoft.MvvmLight;
 using System;
 
@@ -10,7 +11,8 @@ namespace Amoba.Services
         void RegisterPage(Type vm, Type page);
 
         void OpenPage<T>(params NamedParameter[] parameters) where T : ViewModelBase;
-
-        void OpenDialog<T>(params NamedParameter[] parameters) where T : ViewModelBase;
+        //void OpenPage<TViewModel>(params Parameter[] parameters) where TViewModel : ViewModelBase;
+        // VAGY
+        //void OpenPage<TViewModel>(Parameter parameter) where TViewModel : ViewModelBase;
     }
 }

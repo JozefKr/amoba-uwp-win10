@@ -122,7 +122,6 @@
     <Compile Include="Bootstrapper.cs" />
     <Compile Include="Converters\PlacesToDimensionsConverter.cs" />
     <Compile Include="Converters\TurnToColorConverter.cs" />
-    <Compile Include="Extensions.cs" />
     <Compile Include="Model\IconType.cs" />
     <Compile Include="Model\Place.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -134,8 +133,8 @@
     <Compile Include="Views\GamePage.xaml.cs">
       <DependentUpon>GamePage.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Views\GameSizeDialog.xaml.cs">
-      <DependentUpon>GameSizeDialog.xaml</DependentUpon>
+    <Compile Include="Views\GameSizePage.xaml.cs">
+      <DependentUpon>GameSizePage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Views\MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
@@ -169,7 +168,7 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Views\GameSizeDialog.xaml">
+    <Page Include="Views\GameSizePage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -188,8 +187,10 @@
     <PackageReference Include="MvvmLight">
       <Version>5.4.1.1</Version>
     </PackageReference>
+    <PackageReference Include="System.Runtime.WindowsRuntime">
+      <Version>4.7.0</Version>
+    </PackageReference>
   </ItemGroup>
-  <ItemGroup />
   <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '14.0' ">
     <VisualStudioVersion>14.0</VisualStudioVersion>
   </PropertyGroup>
