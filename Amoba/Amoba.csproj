@@ -159,6 +159,7 @@
   <ItemGroup>
     <Content Include="Assets\Images\circle.png" />
     <Content Include="Assets\Images\cross.png" />
+    <Content Include="Assets\Images\game_logo.png" />
     <Content Include="Assets\Images\icon.ico" />
     <Content Include="Properties\Default.rd.xml" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />

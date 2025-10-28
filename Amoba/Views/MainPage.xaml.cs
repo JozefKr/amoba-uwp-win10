@@ -1,6 +1,7 @@
 ﻿using Windows.ApplicationModel.Core;
 using Windows.UI.Core;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media.Animation;
 
 namespace Amoba.Views
 {
@@ -12,6 +13,11 @@ namespace Amoba.Views
         public MainPage()
         {
             this.InitializeComponent();
+
+            // Animáció indítása ---
+            // Hivatkozzunk a XAML-ben elnevezett Storyboardra és indítsuk el.
+            // Győződj meg róla, hogy a 'using Windows.UI.Xaml.Media.Animation;' hozzá van adva!
+            (Resources["FadeOutLogoStoryboard"] as Storyboard)?.Begin();
         }
 
         protected override void OnBackRequested(BackRequestedEventArgs e)

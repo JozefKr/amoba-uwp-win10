@@ -5,19 +5,54 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
+    xmlns:conv="using:Amoba.Converters"
     xmlns:local="using:Amoba.Views"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     d:DesignHeight="325" d:DesignWidth="525">
+    
+    <Page.Resources>
+        <conv:PlacesToDimensionsConverter x:Key="placesToDimensions"/>
 
+        <Storyboard x:Name="FadeOutLogoStoryboard">
+            <DoubleAnimation
+                Storyboard.TargetName="LogoImage"
+                Storyboard.TargetProperty="Opacity"
+                From="1.0" To="0.0" Duration="0:0:1" />
+            <ObjectAnimationUsingKeyFrames
+                Storyboard.TargetName="LogoImage"
+                Storyboard.TargetProperty="Visibility"
+                BeginTime="0:0:1">
+                <DiscreteObjectKeyFrame KeyTime="0">
+                    <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Collapsed</Visibility>
+                    </DiscreteObjectKeyFrame.Value>
+                </DiscreteObjectKeyFrame>
+            </ObjectAnimationUsingKeyFrames>
+        </Storyboard>
+    </Page.Resources>
     <Grid>
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Viewbox 
+            HorizontalAlignment="Center" 
+            VerticalAlignment="Center"
+            MaxWidth="400" 
+            MaxHeight="400">
+
+            <Image x:Name="LogoImage" 
+               Source="ms-appx:///Assets/Images/game_logo.png" 
+               Stretch="Uniform" 
+               Opacity="1.0" />
+        </Viewbox>
+
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Stretch"
+                    Margin="20,0">
             <Button
                 x:Name="newgame" 
                 Content="Új játék" 
                 FontSize="20" 
                 Margin="0,0,0,20" 
                 Command="{Binding StartGame}"
-                Width="375" Height="40"
+                MinHeight="50"
                 HorizontalAlignment="Stretch"
                 Background="{ThemeResource SystemControlHighlightAccentBrush}"
                 Foreground="White" />
