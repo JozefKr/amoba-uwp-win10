@@ -37,28 +37,30 @@ namespace Amoba.ViewModel
         public bool Enabled
         {
             get { return _enabled; }
-            set
-            {
-                _enabled = value;
-                RaisePropertyChanged();
-            }
+            set => Set(ref _enabled, value);
         }
         // --- Változatlan tulajdonságok vége ---
 
 
         private void SelectSizeMethod(string size)
         {
+            // 1. Ha már le van tiltva (dupla kattintás), ne csinálj semmit
+            if (!Enabled) return;
+
             if (int.TryParse(size, out int boardSize) && boardSize > 0)
             {
-                // Létrehozzuk a két NamedParameter objektumot a helyes nevekkel
+                // 2. Tiltás a navigáció előtt
+                Enabled = false;
+
                 var sizeParam = new NamedParameter("boardSizeParam", boardSize);
                 var modeParam = new NamedParameter("isVsComputerParam", _isVsComputerMode);
-
-                // Explicit Parameter tömb létrehozása
                 var parameters = new Parameter[] { sizeParam, modeParam };
 
-                // Közvetlenül az IViewService OpenPage(params Parameter[] parameters) metódusát hívjuk meg
                 _viewService.OpenPage<GameViewModel>(parameters);
+
+                // 3. A navigáció után már mindegy, de ha a felhasználó
+                // visszanavigál, a ViewModel konstruktora újra lefut
+                // és visszaállítja 'Enabled = true'-ra. Ez a logika így jó.
             }
         }
     }
