@@ -1,23 +1,30 @@
-﻿using GalaSoft.MvvmLight; // Szükséges a ViewModelBase miatt
+﻿using GalaSoft.MvvmLight;
 using System;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 
 namespace Amoba.Model
 {
-    // Kiterjesztettük ViewModelBase-szel, hogy tudjon változásértesítést küldeni
-    // ICloneable interfészt ELTÁVOLÍTOTTUK
     public class Place : ViewModelBase
     {
+        // ===================================================================
+        // JAVÍTÁS (Teljesítmény): Kép-gyorsítótárazás
+        // A képeket csak egyszer hozzuk létre, amikor az osztály betöltődik.
+        // Ez (főleg az AI klónozása miatt) rengeteg memóriát és processzoridőt spórol.
+        // ===================================================================
+        private static readonly ImageSource ImageCircle = new BitmapImage(new Uri("ms-appx:///Assets/Images/circle.png"));
+        private static readonly ImageSource ImageCross = new BitmapImage(new Uri("ms-appx:///Assets/Images/cross.png"));
+        // ===================================================================
+
         private bool _isEmpty;
-        private IconType _type; // Nullable helyett alapértelmezett None
+        private IconType _type;
         private ImageSource _image;
         private int _id;
 
         public Place()
         {
             _isEmpty = true;
-            _type = IconType.None; // Alapértelmezett érték
+            _type = IconType.None;
         }
 
         public int Id
@@ -30,12 +37,16 @@ namespace Amoba.Model
         public ImageSource Image
         {
             get => _image;
+            // A 'private set' tökéletes eltokozás!
             private set => Set(ref _image, value);
         }
 
         public bool IsEmpty
         {
             get => _isEmpty;
+            // A 'private set' itt is jó lenne, de a 'public' sem hiba,
+            // mivel az UpdateImageAndState hívja meg.
+            // Maradjunk a 'Set' használatánál, ahogy írtad:
             set => Set(ref _isEmpty, value);
         }
 
@@ -44,10 +55,10 @@ namespace Amoba.Model
             get => _type;
             set
             {
-                // A Set metódus kezeli a RaisePropertyChanged-et
+                // A 'Set' biztosítja, hogy a logika csak akkor fusson le, ha
+                // az érték tényleg változott.
                 if (Set(ref _type, value))
                 {
-                    // Ha a típus változik, frissítjük a képet és az IsEmpty állapotot
                     UpdateImageAndState(value);
                 }
             }
@@ -56,34 +67,42 @@ namespace Amoba.Model
         // Segédmetódus a kép és IsEmpty állapot frissítésére
         private void UpdateImageAndState(IconType newType)
         {
-            IsEmpty = (newType == IconType.None); // Csak akkor üres, ha None
+            // Amikor a Típus változik, az IsEmpty állapota automatikusan követi.
+            IsEmpty = (newType == IconType.None);
 
-            if (newType == IconType.Circle)
+            // JAVÍTÁS: 'switch' használata olvashatóbb, mint az 'if-else if-else'
+            // JAVÍTÁS: A 'new BitmapImage' helyett a statikus mezőket használjuk.
+            switch (newType)
             {
-                Image = new BitmapImage(new Uri("ms-appx:///Assets/Images/circle.png"));
-            }
-            else if (newType == IconType.Cross)
-            {
-                Image = new BitmapImage(new Uri("ms-appx:///Assets/Images/cross.png"));
-            }
-            else // None esetén
-            {
-                Image = null;
+                case IconType.Circle:
+                    Image = ImageCircle;
+                    break;
+                case IconType.Cross:
+                    Image = ImageCross;
+                    break;
+                case IconType.None:
+                default:
+                    Image = null;
+                    break;
             }
         }
 
-        // SAJÁT Clone metódus, ami nem használ ICloneable interfészt
-        // JAVÍTVA: A publikus property-ket használjuk a beállításhoz
+        /// <summary>
+        /// Létrehozza ennek a 'Place'-nek egy memóriabeli másolatát (klónját),
+        /// főleg az AI algoritmus (Minimax) számára.
+        /// </summary>
         public Place ClonePlace()
         {
             var clone = new Place();
             clone.Id = this.Id;
-            // Fontos: Itt a Type property setterét kell hívni,
-            // hogy az UpdateImageAndState is lefusson a klónon!
+
+            // JAVÍTÁS: A 'Type' beállítása automatikusan beállítja
+            // az 'Image' és 'IsEmpty' tulajdonságokat a klónon is
+            // az 'UpdateImageAndState' metóduson keresztül.
             clone.Type = this.Type;
-            // Az IsEmpty a Type setterében beállítódik, de explicit is beállíthatjuk
-            clone._isEmpty = this._isEmpty; // Itt a privát mező direkt beállítása még szükséges lehet
-                                            // mert a Type setter az IsEmpty-t a newType alapján állítja
+
+            // TÖRÖLVE: A 'clone._isEmpty = this._isEmpty;' sor felesleges,
+            // mert a 'clone.Type' settere már beállította az 'IsEmpty'-t.
 
             return clone;
         }
