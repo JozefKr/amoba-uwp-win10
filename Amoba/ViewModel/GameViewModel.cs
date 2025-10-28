@@ -28,6 +28,9 @@ namespace Amoba.ViewModel
         private int boardSize;
         private AiPlayer aiPlayer;
 
+        private bool _isGameOver;
+        private string _gameOverMessage;
+
         public int BoardSize
         {
             get => boardSize;
@@ -106,6 +109,25 @@ namespace Amoba.ViewModel
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Jelzi, hogy a játéknak vége van-e. 
+        /// Ez a XAML-ben a felugró ablak láthatóságát vezérli.
+        /// </summary>
+        public bool IsGameOver
+        {
+            get => _isGameOver;
+            set => Set(ref _isGameOver, value);
+        }
+
+        /// <summary>
+        /// Az üzenet, ami a felugró ablakban megjelenik (pl. "X Nyert!" vagy "Döntetlen!").
+        /// </summary>
+        public string GameOverMessage
+        {
+            get => _gameOverMessage;
+            set => Set(ref _gameOverMessage, value);
         }
 
         public ObservableCollection<Place> Places
@@ -219,56 +241,66 @@ namespace Amoba.ViewModel
             place.Type = type; // Ez aktiválja a PropertyChanged-et a Place modellen belül
                                // place.IsEmpty = false; // Ezt a Place modell Type settere már megteheti
 
-            // Frissítjük a parancs futtathatóságát (az éppen megnyomott gomb letiltása)
             (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
 
-            // Győztes ellenőrzése
-            var winner = GameLogic.CheckWinner(Places, BoardSize); // Statikus metódus használata
+            var winner = GameLogic.CheckWinner(Places, BoardSize);
             var isBoardFull = Places.All(p => !p.IsEmpty);
 
+            // --- JAVÍTÁS ITT ---
             if (winner != IconType.None || isBoardFull)
             {
-                // Játék vége üzenet (később lehet szebb UI)
-                string message = winner == IconType.Cross ? "Player 1 Wins!" :
-                                 winner == IconType.Circle ? (isVsComputer ? "Computer Wins!" : "Player 2 Wins!") :
-                                 "It's a Draw!";
-                Debug.WriteLine(message); // Ideiglenes kiírás
+                // 1. ÁLLÍTSUK BE AZ ÜZENETET
+                if (winner == IconType.Cross)
+                {
+                    GameOverMessage = "Játékos (X) Nyert!";
+                    Player1Score++;
+                }
+                else if (winner == IconType.Circle)
+                {
+                    GameOverMessage = isVsComputer ? "A Gép Nyert!" : "Játékos (O) Nyert!";
+                    Player2Score++;
+                }
+                else // Döntetlen (isBoardFull)
+                {
+                    GameOverMessage = "Döntetlen!";
+                }
 
-                // Pontszám növelése
-                if (winner == IconType.Cross) Player1Score++;
-                else if (winner == IconType.Circle) Player2Score++;
+                // 2. JELENÍTSÜK MEG A FELUGRÓ ABLAKOT
+                IsGameOver = true;
 
-                // Tábla törlése - Helyesen, ObservableCollection elemeit módosítva
+                // 3. A Debug.WriteLine már nem szükséges
+                // Debug.WriteLine(GameOverMessage); 
+
+                // 4. INDÍTSUK A RESETELÉST (ami 1.5s múlva elrejti az ablakot)
                 ResetBoard();
             }
             else
             {
-                // Következő kör
                 ChangeTurn();
             }
         }
 
-        // Tábla törlése helyesen ObservableCollection esetén
-        private void ResetBoard()
+        private async void ResetBoard()
         {
-            // Rövid késleltetés, hogy a felhasználó lássa a végeredményt
-            // Ezt egy szebb UI megoldással (pl. Dialog) kellene helyettesíteni
-            Task.Delay(1500).ContinueWith(_ => // Növelt késleltetés
+            await Task.Delay(1500);
+
+            GalaSoft.MvvmLight.Threading.DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                // UI szálra kell visszatérni a kollekció módosításához!
-                GalaSoft.MvvmLight.Threading.DispatcherHelper.CheckBeginInvokeOnUI(() =>
+                foreach (var place in Places)
                 {
-                    foreach (var place in Places)
-                    {
-                        place.Type = IconType.None; // Visszaállítjuk None-ra
-                        // place.IsEmpty = true; // Ezt a Place modell Type settere megteheti
-                    }
-                    IsPlayer1Turn = true; // Ember kezd újra (általában)
-                    IsPlayer2Turn = false;
-                    isComputerTurn = false;
-                    isProcessingAiMove = false;
-                    (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok frissítése
-                });
+                    place.Type = IconType.None;
+                }
+                IsPlayer1Turn = true;
+                IsPlayer2Turn = false;
+                isComputerTurn = false;
+                isProcessingAiMove = false;
+
+                // --- JAVÍTÁS ITT ---
+                // Rejtsük el a felugró ablakot az új kör kezdetekor
+                IsGameOver = false;
+                // --- JAVÍTÁS VÉGE ---
+
+                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
             });
         }
 

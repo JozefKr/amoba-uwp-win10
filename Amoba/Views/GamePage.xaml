@@ -12,7 +12,8 @@
 
     <Page.Resources>
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions" />
-        <conv:TurnToColorConverter x:Key="turnToColor" />
+        <conv:TurnToColorConverter x:Key="turnToColor"/>
+        <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
         <Style x:Key="GameBoardButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}"/>
@@ -129,6 +130,18 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Viewbox>
+        <Grid Background="#BF000000" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+          Visibility="{Binding IsGameOver, Converter={StaticResource BooleanToVisibilityConverter}}">
 
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+
+                <TextBlock Text="{Binding GameOverMessage}"
+                       Style="{ThemeResource HeaderTextBlockStyle}"
+                       FontSize="48"
+                       Foreground="White"
+                       HorizontalAlignment="Center"
+                       TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </local:BasePage>
