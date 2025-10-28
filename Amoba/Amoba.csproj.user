@@ -14,5 +14,6 @@
   <PropertyGroup>
     <SplashScreenSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</SplashScreenSource>
     <AppIconSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</AppIconSource>
+    <BadgeLogoSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</BadgeLogoSource>
   </PropertyGroup>
 </Project>
