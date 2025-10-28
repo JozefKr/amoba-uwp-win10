@@ -135,6 +135,7 @@
     <Compile Include="ViewModel\GameTypeViewModel.cs" />
     <Compile Include="ViewModel\GameViewModel.cs" />
     <Compile Include="ViewModel\MainViewModel.cs" />
+    <Compile Include="Views\BasePage.cs" />
     <Compile Include="Views\GamePage.xaml.cs">
       <DependentUpon>GamePage.xaml</DependentUpon>
     </Compile>
