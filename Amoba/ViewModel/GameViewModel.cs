@@ -1,277 +1,188 @@
 ﻿using Amoba.Model;
-using Amoba.Services; // Szükséges az AiPlayer és a GameLogic eléréséhez
+using Amoba.Services;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics; // Hibakereséshez
+using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks; // Aszinkron AI lépéshez
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace Amoba.ViewModel
 {
     public class GameViewModel : ViewModelBase
     {
+        // ... (A tulajdonságok: player1Score, places, isGameOver stb. változatlanok) ...
         private int player1Score;
         private int player2Score;
-
         private bool isPlayer1Turn;
         private bool isPlayer2Turn;
         private bool isComputerTurn = false;
-        private bool isVsComputer; // Eltávolítottuk az alapértelmezett 'true'-t
+        private bool isVsComputer;
         private bool isProcessingAiMove = false;
-
         private ObservableCollection<Place> places;
         private ICommand setImage;
         private ICommand newGameCommand;
         private int boardSize;
         private AiPlayer aiPlayer;
-
         private bool _isGameOver;
         private string _gameOverMessage;
 
-        public int BoardSize
-        {
-            get => boardSize;
-            set => Set(ref boardSize, value);
-        }
-
-        // 1. Alapértelmezett konstruktor (Paraméter nélküli)
-        public GameViewModel()
-        {
-            // Alapértelmezett mód: Játékos vs Játékos, 3x3
-            InitializeViewModel(3, false);
-        }
-
-        // 2. Paraméteres konstruktor (Ezt hívja a ViewService)
-        // MOST MÁR FOGADJA AZ isVsComputer PARAMÉTERT IS
-        public GameViewModel(int boardSizeParam, bool isVsComputerParam)
-        {
-            InitializeViewModel(boardSizeParam, isVsComputerParam);
-        }
-
-        private void InitializeViewModel(int boardSizeParam, bool isVsComputerMode)
-        {
-            BoardSize = boardSizeParam;
-            this.isVsComputer = isVsComputerMode; // Eltároljuk a kapott játékmódot
-            aiPlayer = new AiPlayer();
-
-            Places = new ObservableCollection<Place>();
-            for (int i = 0; i < Math.Pow(this.BoardSize, 2); i++)
-            {
-                // Biztosítjuk, hogy az alapértelmezett Type az IconType.None legyen
-                Places.Add(new Place() { Id = i, Type = IconType.None });
-            }
-
-            Player1Score = 0;
-            Player2Score = 0;
-            IsPlayer1Turn = true; // Ember kezd (X)
-            IsPlayer2Turn = false;
-            isComputerTurn = false; // Kezdetben nem a gép jön
-
-            // Ha gép ellen játszunk ÉS a gép kezdene (O), itt lehetne indítani az AI-t
-            // if (this.isVsComputer && !IsPlayer1Turn) { TriggerAiMove(); }
-        }
-
-        public int Player2Score
-        {
-            get => player2Score;
-            set => Set(ref player2Score, value);
-        }
-
-        public int Player1Score
-        {
-            get => player1Score;
-            set => Set(ref player1Score, value);
-        }
-
-        public bool IsPlayer1Turn
-        {
-            get => isPlayer1Turn;
-            set => Set(ref isPlayer1Turn, value);
-        }
-
+        // ... (A publikus property-k: Player1Score, Places, IsGameOver stb. változatlanok) ...
+        public int BoardSize { get => boardSize; set => Set(ref boardSize, value); }
+        public int Player2Score { get => player2Score; set => Set(ref player2Score, value); }
+        public int Player1Score { get => player1Score; set => Set(ref player1Score, value); }
+        public bool IsPlayer1Turn { get => isPlayer1Turn; set => Set(ref isPlayer1Turn, value); }
         public bool IsPlayer2Turn
         {
             get => isPlayer2Turn;
             set
             {
-                // Használjuk a Set metódust, ami csak akkor futtatja a logikát, ha az érték tényleg változik
                 if (Set(ref isPlayer2Turn, value))
                 {
-                    // Ha gép ellen játszunk, és a 2. játékos (O, a gép) következik
                     isComputerTurn = isVsComputer && value;
-                    if (isComputerTurn && !isProcessingAiMove) // Csak akkor indítjuk, ha nem fut már
+                    if (isComputerTurn && !isProcessingAiMove)
                     {
-                        // AI lépés indítása aszinkron módon
                         TriggerAiMove();
                     }
                 }
             }
         }
-
-        /// <summary>
-        /// Jelzi, hogy a játéknak vége van-e. 
-        /// Ez a XAML-ben a felugró ablak láthatóságát vezérli.
-        /// </summary>
-        public bool IsGameOver
-        {
-            get => _isGameOver;
-            set => Set(ref _isGameOver, value);
-        }
-
-        /// <summary>
-        /// Az üzenet, ami a felugró ablakban megjelenik (pl. "X Nyert!" vagy "Döntetlen!").
-        /// </summary>
-        public string GameOverMessage
-        {
-            get => _gameOverMessage;
-            set => Set(ref _gameOverMessage, value);
-        }
-
-        public ObservableCollection<Place> Places
-        {
-            get => places;
-            // Itt is a Set metódust használjuk a RaisePropertyChanged biztosításához
-            set => Set(ref places, value);
-        }
-
+        public bool IsGameOver { get => _isGameOver; set => Set(ref _isGameOver, value); }
+        public string GameOverMessage { get => _gameOverMessage; set => Set(ref _gameOverMessage, value); }
+        public ObservableCollection<Place> Places { get => places; set => Set(ref places, value); }
         public ICommand SetImage
         {
-            get
-            {
-                return setImage ??
-                    (setImage = new RelayCommand<Place>(
-                        SetImageMethod,
-                        // CanExecute: Csak akkor engedélyezett, ha a mező üres ÉS nem az AI lépése van folyamatban ÉS (Játékos vs Játékos MÓD VAGY NEM a gép jön)
-                        p => p != null && p.IsEmpty && !isProcessingAiMove && (!isVsComputer || !isComputerTurn)
-                    ));
-            }
+            get => setImage ?? (setImage = new RelayCommand<Place>(SetImageMethod,
+                        p => p != null && p.IsEmpty && !isProcessingAiMove && (!isVsComputer || !isComputerTurn)));
         }
-
         public ICommand NewGameCommand
         {
-            get
-            {
-                return newGameCommand ??
-                    (newGameCommand = new RelayCommand(ExecuteNewGame));
-            }
+            get => newGameCommand ?? (newGameCommand = new RelayCommand(ExecuteNewGame));
         }
 
-        private void ExecuteNewGame()
+        // --- Konstruktorok és Inicializálás (változatlan) ---
+        public GameViewModel()
         {
-            // Ez a metódus visszaállít mindent, a pontszámokat is.
+            InitializeViewModel(3, false);
+        }
+        public GameViewModel(int boardSizeParam, bool isVsComputerParam)
+        {
+            InitializeViewModel(boardSizeParam, isVsComputerParam);
+        }
+        private void InitializeViewModel(int boardSizeParam, bool isVsComputerMode)
+        {
+            BoardSize = boardSizeParam;
+            this.isVsComputer = isVsComputerMode;
+            aiPlayer = new AiPlayer();
+
+            Places = new ObservableCollection<Place>();
+            for (int i = 0; i < Math.Pow(this.BoardSize, 2); i++)
+            {
+                Places.Add(new Place() { Id = i, Type = IconType.None });
+            }
             Player1Score = 0;
             Player2Score = 0;
-            ResetBoard(); // A ResetBoard már gondoskodik a tábla törléséről és a körök visszaállításáról
+            IsPlayer1Turn = true;
+            IsPlayer2Turn = false;
+            isComputerTurn = false;
+            IsGameOver = false; // Kezdetben nincs vége a játéknak
         }
 
+        // --- Parancsok végrehajtói (ExecuteNewGame, SetImageMethod változatlan) ---
+        private void ExecuteNewGame()
+        {
+            Player1Score = 0;
+            Player2Score = 0;
+            ResetBoard();
+        }
         private void SetImageMethod(Place place)
         {
-            // Extra védelem: Ha gép ellen játszunk és a gép jön, vagy már folyamatban van az AI lépés, vagy a hely érvénytelen, ne csináljunk semmit
             if ((isVsComputer && isComputerTurn) || isProcessingAiMove || place == null || !place.IsEmpty)
             {
                 return;
             }
-
-            // Emberi lépés végrehajtása
             ExecuteMove(place, IsPlayer1Turn ? IconType.Cross : IconType.Circle);
         }
 
-        // AI lépés indítása (aszinkron, hogy a UI ne fagyjon le)
+
+        // ===================================================================
+        // --- TriggerAiMove MÓDOSÍTVA ---
+        // ===================================================================
         private async void TriggerAiMove()
         {
-            if (isProcessingAiMove || !isVsComputer || !isComputerTurn) return; // Extra védelem
+            if (isProcessingAiMove || !isVsComputer || !isComputerTurn) return;
 
             isProcessingAiMove = true;
-            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok letiltása
+            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
 
-            await Task.Delay(200); // Rövid várakozás a jobb UX érdekében
+            await Task.Delay(200);
 
             try
             {
-                Place bestMovePlace = aiPlayer.FindBestMove(new ObservableCollection<Place>(Places.Select(p => p.ClonePlace())), BoardSize); // Másolatot adunk át az AI-nak
+                // JAVÍTÁS: Nincs többé szükség klónozásra. Az új AiPlayer
+                // nem módosítja az eredeti 'Places' kollekciót.
+                Place bestMovePlace = aiPlayer.FindBestMove(Places, BoardSize);
 
                 if (bestMovePlace != null)
                 {
-                    // Az eredeti kollekcióban keressük meg a megfelelő elemet az ID alapján
-                    var targetPlace = Places.FirstOrDefault(p => p.Id == bestMovePlace.Id);
-                    if (targetPlace != null && targetPlace.IsEmpty)
+                    // Az AI által visszaadott Place objektum az EREDETI kollekcióból származik.
+                    // Közvetlenül használhatjuk. (Nincs szükség ID alapján keresésre sem).
+                    if (bestMovePlace.IsEmpty) // Dupla ellenőrzés (elvileg felesleges)
                     {
-                        // Gép lépésének végrehajtása (mindig O)
-                        ExecuteMove(targetPlace, IconType.Circle);
+                        ExecuteMove(bestMovePlace, IconType.Circle);
                     }
                     else
                     {
-                        Debug.WriteLine("AI által választott lépés már foglalt vagy érvénytelen.");
-                        // Itt lehetne alternatív lépést keresni, vagy csak kihagyni
-                        if (!Places.All(p => !p.IsEmpty)) // Ha még nincs tele a tábla
-                            ChangeTurn(); // Visszaadjuk a vezérlést az embernek? Vagy újra próbálkozzon az AI?
+                        Debug.WriteLine("AI által választott lépés már foglalt vagy érvénytelen (váratlan hiba!).");
+                        if (!Places.All(p => !p.IsEmpty))
+                            ChangeTurn();
                     }
                 }
                 else
                 {
                     Debug.WriteLine("AI nem talált lépést (valószínűleg döntetlen vagy hiba).");
-                    // Ha nincs több lépés, a játék véget érhetett volna már az ExecuteMove-ban
                     if (!Places.All(p => !p.IsEmpty))
-                        ChangeTurn(); // Visszaadjuk a vezérlést?
+                        ChangeTurn();
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"AI Hiba: {ex.Message}");
                 if (!Places.All(p => !p.IsEmpty))
-                    ChangeTurn(); // Hiba esetén is adjuk vissza a kört, ha még van hely
+                    ChangeTurn();
             }
             finally
             {
                 isProcessingAiMove = false;
-                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok engedélyezése
+                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
             }
         }
+        // ===================================================================
+        // --- TriggerAiMove VÉGE ---
+        // ===================================================================
 
 
-        // Közös lépés végrehajtó metódus (emberi és AI)
+        // --- ExecuteMove (változatlan, a CheckWinner hívás már jó volt) ---
         private void ExecuteMove(Place place, IconType type)
         {
-            // Itt már a helyes Place objektumot kapjuk (FirstOrDefault ellenőrzés után)
             if (place == null || !place.IsEmpty) return;
 
-            place.Type = type; // Ez aktiválja a PropertyChanged-et a Place modellen belül
-                               // place.IsEmpty = false; // Ezt a Place modell Type settere már megteheti
-
+            place.Type = type;
             (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
 
+            // Ez a hívás már helyes, mert ObservableCollection -> IReadOnlyList konverzió működik.
             var winner = GameLogic.CheckWinner(Places, BoardSize);
             var isBoardFull = Places.All(p => !p.IsEmpty);
 
-            // --- JAVÍTÁS ITT ---
             if (winner != IconType.None || isBoardFull)
             {
-                // 1. ÁLLÍTSUK BE AZ ÜZENETET
-                if (winner == IconType.Cross)
-                {
-                    GameOverMessage = "Játékos (X) Nyert!";
-                    Player1Score++;
-                }
-                else if (winner == IconType.Circle)
-                {
-                    GameOverMessage = isVsComputer ? "A Gép Nyert!" : "Játékos (O) Nyert!";
-                    Player2Score++;
-                }
-                else // Döntetlen (isBoardFull)
-                {
-                    GameOverMessage = "Döntetlen!";
-                }
+                if (winner == IconType.Cross) { GameOverMessage = "Játékos (X) Nyert!"; Player1Score++; }
+                else if (winner == IconType.Circle) { GameOverMessage = isVsComputer ? "A Gép Nyert!" : "Játékos (O) Nyert!"; Player2Score++; }
+                else { GameOverMessage = "Döntetlen!"; }
 
-                // 2. JELENÍTSÜK MEG A FELUGRÓ ABLAKOT
                 IsGameOver = true;
-
-                // 3. A Debug.WriteLine már nem szükséges
-                // Debug.WriteLine(GameOverMessage); 
-
-                // 4. INDÍTSUK A RESETELÉST (ami 1.5s múlva elrejti az ablakot)
                 ResetBoard();
             }
             else
@@ -280,36 +191,27 @@ namespace Amoba.ViewModel
             }
         }
 
+        // --- ResetBoard (változatlan) ---
         private async void ResetBoard()
         {
             await Task.Delay(1500);
 
             GalaSoft.MvvmLight.Threading.DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                foreach (var place in Places)
-                {
-                    place.Type = IconType.None;
-                }
+                foreach (var place in Places) { place.Type = IconType.None; }
                 IsPlayer1Turn = true;
                 IsPlayer2Turn = false;
                 isComputerTurn = false;
                 isProcessingAiMove = false;
-
-                // --- JAVÍTÁS ITT ---
-                // Rejtsük el a felugró ablakot az új kör kezdetekor
-                IsGameOver = false;
-                // --- JAVÍTÁS VÉGE ---
-
+                IsGameOver = false; // Overlay elrejtése
                 (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
             });
         }
 
-
+        // --- ChangeTurn (változatlan) ---
         private void ChangeTurn()
         {
-            // Egyszerű váltás
             IsPlayer1Turn = !IsPlayer1Turn;
-            // A IsPlayer2Turn Property settere automatikusan kezeli az AI indítását
             IsPlayer2Turn = !IsPlayer1Turn;
         }
     }

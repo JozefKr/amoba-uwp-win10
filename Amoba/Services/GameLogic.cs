@@ -94,5 +94,62 @@ namespace Amoba.Services // Névtér frissítve
         EndCheck: // Címke a goto-hoz
             return currentWinner; // Visszaadjuk a talált győztest vagy None-t
         }
+
+        public static IconType CheckWinner(IconType[] board, int boardSize)
+        {
+            if (board == null || board.Length != boardSize * boardSize) return IconType.None;
+
+            // Sorok
+            for (int row = 0; row < boardSize; row++)
+            {
+                IconType first = board[row * boardSize];
+                if (first != IconType.None)
+                {
+                    bool win = true;
+                    for (int col = 1; col < boardSize; col++)
+                    {
+                        if (board[row * boardSize + col] != first) { win = false; break; }
+                    }
+                    if (win) return first;
+                }
+            }
+            // Oszlopok (hasonlóan)
+            for (int col = 0; col < boardSize; col++)
+            {
+                IconType first = board[col];
+                if (first != IconType.None)
+                {
+                    bool win = true;
+                    for (int row = 1; row < boardSize; row++)
+                    {
+                        if (board[row * boardSize + col] != first) { win = false; break; }
+                    }
+                    if (win) return first;
+                }
+            }
+            // Főátló
+            IconType mainDiag = board[0];
+            if (mainDiag != IconType.None)
+            {
+                bool win = true;
+                for (int i = 1; i < boardSize; i++)
+                {
+                    if (board[i * boardSize + i] != mainDiag) { win = false; break; }
+                }
+                if (win) return mainDiag;
+            }
+            // Mellékátló
+            IconType antiDiag = board[boardSize - 1];
+            if (antiDiag != IconType.None)
+            {
+                bool win = true;
+                for (int i = 1; i < boardSize; i++)
+                {
+                    if (board[i * boardSize + (boardSize - 1 - i)] != antiDiag) { win = false; break; }
+                }
+                if (win) return antiDiag;
+            }
+            return IconType.None;
+        }
     }
 }

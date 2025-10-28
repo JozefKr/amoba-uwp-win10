@@ -11,116 +11,179 @@ namespace Amoba.Services
     {
         private const int MaxDepth = 4; // Mélységkorlát nagyobb táblákhoz (állítható)
 
-        // Megkeresi a legjobb lépést a Minimax algoritmussal
-        public Place FindBestMove(ObservableCollection<Place> board, int boardSize)
+        // Konstansok a kiértékeléshez (Clean Code)
+        private const int WIN_SCORE = 10;
+        private const int LOSS_SCORE = -10;
+        private const int DRAW_SCORE = 0;
+
+        /// <summary>
+        /// Megkeresi a legjobb lépést a Minimax algoritmussal, Alfa-Béta vágással optimalizálva.
+        /// </summary>
+        /// <param name="currentBoardPlaces">A játék jelenlegi állása ObservableCollection<Place> formában.</param>
+        /// <param name="boardSize">A tábla mérete.</param>
+        /// <returns>A legjobb lépéshez tartozó Place objektum, vagy null, ha nincs lépés.</returns>
+        public Place FindBestMove(ObservableCollection<Place> currentBoardPlaces, int boardSize)
         {
-            int bestVal = int.MinValue;
-            Place bestMove = null;
+            // --- JAVÍTÁS: Konvertálás egyszerű tömbre a teljesítményért ---
+            IconType[] board = currentBoardPlaces.Select(p => p.Type).ToArray();
+            int bestScore = int.MinValue;
+            int bestMoveIndex = -1; // A legjobb lépés indexét tároljuk
 
-            // Végigmegyünk az összes üres mezőn
-            foreach (var place in board.Where(p => p.IsEmpty))
+            // JAVÍTÁS: Optimalizált lépésgenerálás (közép, sarkok, többi)
+            foreach (int moveIndex in GetOptimizedPossibleMoves(board, boardSize))
             {
-                // Megpróbáljuk a lépést az AI-val (Circle)
-                place.Type = IconType.Circle;
-                place.IsEmpty = false;
+                // Lépés végrehajtása a tömbön (nincs Place objektum módosítás!)
+                board[moveIndex] = IconType.Circle; // AI lép (mindig O)
 
-                // Kiszámoljuk a lépés értékét a Minimax segítségével
-                // Az AI maximalizál, az ellenfél (Human) minimalizál
-                int moveVal = Minimax(board, boardSize, 0, false); // Mélység 0, ellenfél (minimalizáló) következik
+                // Minimax hívása Alfa-Béta vágással
+                int score = Minimax(board, boardSize, 0, false, int.MinValue, int.MaxValue);
 
-                // Visszavonjuk a lépést (backtracking)
-                place.Type = IconType.None;
-                place.IsEmpty = true;
+                // Lépés visszavonása a tömbön
+                board[moveIndex] = IconType.None;
 
-                // Ha ez a lépés jobb, mint az eddigi legjobb, elmentjük
-                if (moveVal > bestVal)
+                // Jobb lépést találtunk?
+                if (score > bestScore)
                 {
-                    bestMove = place;
-                    bestVal = moveVal;
+                    bestScore = score;
+                    bestMoveIndex = moveIndex;
                 }
             }
-            // Ha valamiért nem talál lépést (pl. már teli a tábla), adjon vissza null-t
-            // VAGY adjon vissza egy random üres mezőt vészhelyzetben
-            if (bestMove == null)
+
+            // Ha találtunk lépést, adjuk vissza a megfelelő Place objektumot
+            if (bestMoveIndex != -1)
             {
-                // return board.FirstOrDefault(p => p.IsEmpty); // Opcionális: random lépés
-                return null;
+                // Keressük meg az eredeti kollekcióban az index alapján
+                // Biztonságosabb, mint a FindBestMove-ból visszaadott Place-re hagyatkozni,
+                // mert az közben megváltozhatott volna (bár a mi logikánkban nem).
+                return currentBoardPlaces[bestMoveIndex];
             }
-            return bestMove; // Visszaadjuk a legjobb lépéshez tartozó Place objektumot
-        }
-
-        // A Minimax rekurzív függvény
-        // board: aktuális táblaállás
-        // depth: aktuális rekurziós mélység
-        // isMaximizing: igaz, ha az AI (maximalizáló) lép, hamis, ha az ellenfél (minimalizáló)
-        private int Minimax(ObservableCollection<Place> board, int boardSize, int depth, bool isMaximizing)
-        {
-            // 1. Alap esetek: Terminális állapotok (győzelem, vereség, döntetlen) vagy mélységi korlát elérése
-            IconType winner = GameLogic.CheckWinner(board, boardSize); // Használjuk a kiszervezett logikát
-
-            if (winner == IconType.Circle) // AI nyert
-                return 10 - depth; // Minél kisebb mélységben nyer, annál jobb
-            if (winner == IconType.Cross) // Ember nyert
-                return -10 + depth; // Minél kisebb mélységben veszít, annál "jobb" (késleltetés)
-
-            bool isMovesLeft = board.Any(p => p.IsEmpty);
-            // Módosított alap eset: Ha nincs több lépés VAGY elértük a max mélységet
-            if (!isMovesLeft || depth >= CalculateMaxDepth(boardSize)) // Dinamikus mélység
-                return 0;
-
-            // 2. Rekurzív lépés
-            if (isMaximizing) // AI (maximalizáló) lépése
+            else
             {
-                int bestVal = int.MinValue;
-                // Hatékonyság: Próbáljuk meg a középső és sarokmezőket először (opcionális)
-                foreach (var place in GetPossibleMoves(board, boardSize))
-                {
-                    place.Type = IconType.Circle;
-                    place.IsEmpty = false;
-
-                    bestVal = Math.Max(bestVal, Minimax(board, boardSize, depth + 1, false)); // Ellenfél következik
-
-                    place.Type = IconType.None; // Visszavonás
-                    place.IsEmpty = true;
-                    // Alfa-Béta vágás (opcionális, itt nincs implementálva a bonyolultság miatt)
-                }
-                return bestVal;
-            }
-            else // Ellenfél (minimalizáló) lépése
-            {
-                int bestVal = int.MaxValue;
-                foreach (var place in GetPossibleMoves(board, boardSize))
-                {
-                    place.Type = IconType.Cross;
-                    place.IsEmpty = false;
-
-                    bestVal = Math.Min(bestVal, Minimax(board, boardSize, depth + 1, true)); // AI következik
-
-                    place.Type = IconType.None; // Visszavonás
-                    place.IsEmpty = true;
-                    // Alfa-Béta vágás (opcionális)
-                }
-                return bestVal;
+                // Vészhelyzet: Nincs üres mező vagy hiba történt.
+                // Adjunk vissza egy random üres mezőt, ha van.
+                var firstEmpty = currentBoardPlaces.FirstOrDefault(p => p.IsEmpty);
+                return firstEmpty; // Ha ez is null, akkor a hívó kódnak kell kezelnie.
             }
         }
 
-        // Dinamikus mélység számítása a tábla mérete alapján
-        // Ez csak egy egyszerű heurisztika, finomítható
+        /// <summary>
+        /// A Minimax algoritmus rekurzív megvalósítása Alfa-Béta vágással.
+        /// Egyszerű IconType[] tömbön dolgozik a maximális teljesítményért.
+        /// </summary>
+        /// <param name="board">A tábla aktuális állapota (IconType tömb).</param>
+        /// <param name="boardSize">A tábla mérete.</param>
+        /// <param name="depth">Aktuális rekurziós mélység.</param>
+        /// <param name="isMaximizing">Igaz, ha az AI (maximalizáló) köre van.</param>
+        /// <param name="alpha">Az eddig talált legjobb érték a maximalizáló számára.</param>
+        /// <param name="beta">Az eddig talált legjobb érték a minimalizáló számára.</param>
+        /// <returns>Az adott táblaállás értékelése.</returns>
+        private int Minimax(IconType[] board, int boardSize, int depth, bool isMaximizing, int alpha, int beta)
+        {
+            // --- JAVÍTÁS: GameLogic hívása az IconType[] tömbhöz ---
+            // Ehhez létre kell hozni egy új CheckWinner overloadot a GameLogic-ban!
+            IconType winner = GameLogic.CheckWinner(board, boardSize); // ÚJ OVERLOAD SZÜKSÉGES!
+
+            // Alap esetek: Terminális állapotok
+            if (winner == IconType.Circle) return WIN_SCORE - depth; // AI nyert
+            if (winner == IconType.Cross) return LOSS_SCORE + depth; // Ember nyert
+
+            // JAVÍTÁS: Gyorsabb ellenőrzés, hogy van-e még üres hely
+            bool isMovesLeft = false;
+            for (int i = 0; i < board.Length; i++)
+            {
+                if (board[i] == IconType.None)
+                {
+                    isMovesLeft = true;
+                    break;
+                }
+            }
+
+            // Alap esetek: Döntetlen vagy mélységi korlát elérése
+            // JAVÍTÁS: Dinamikus mélység számítása
+            if (!isMovesLeft || depth >= CalculateMaxDepth(boardSize))
+            {
+                return DRAW_SCORE;
+            }
+
+            // Rekurzív lépés
+            if (isMaximizing) // AI (maximalizáló)
+            {
+                int bestScore = int.MinValue;
+                // JAVÍTÁS: Optimalizált lépések bejárása
+                foreach (int moveIndex in GetOptimizedPossibleMoves(board, boardSize))
+                {
+                    board[moveIndex] = IconType.Circle;
+                    bestScore = Math.Max(bestScore, Minimax(board, boardSize, depth + 1, false, alpha, beta));
+                    board[moveIndex] = IconType.None; // Visszavonás
+
+                    // --- JAVÍTÁS: Alfa-Béta vágás ---
+                    alpha = Math.Max(alpha, bestScore);
+                    if (beta <= alpha)
+                        break; // Béta vágás: A minimalizáló már talált ennél jobbat, felesleges tovább keresni
+                    // --- Alfa-Béta VÉGE ---
+                }
+                return bestScore;
+            }
+            else // Ember (minimalizáló)
+            {
+                int bestScore = int.MaxValue;
+                foreach (int moveIndex in GetOptimizedPossibleMoves(board, boardSize))
+                {
+                    board[moveIndex] = IconType.Cross;
+                    bestScore = Math.Min(bestScore, Minimax(board, boardSize, depth + 1, true, alpha, beta));
+                    board[moveIndex] = IconType.None; // Visszavonás
+
+                    // --- JAVÍTÁS: Alfa-Béta vágás ---
+                    beta = Math.Min(beta, bestScore);
+                    if (beta <= alpha)
+                        break; // Alfa vágás: A maximalizáló már talált ennél jobbat, felesleges tovább keresni
+                    // --- Alfa-Béta VÉGE ---
+                }
+                return bestScore;
+            }
+        }
+
+        // Dinamikus mélység számítása
         private int CalculateMaxDepth(int boardSize)
         {
-            if (boardSize == 3) return 9; // 3x3-on teljes keresés
-            if (boardSize == 4) return 4; // 4x4-en korlátozott mélység
-            if (boardSize == 5) return 3; // 5x5-ön még jobban korlátozott
-            return 3; // Alapértelmezett
+            if (boardSize == 3) return 9; // 3x3: Teljes fa bejárása
+            if (boardSize == 4) return 6; // 4x4: Növelt mélység Alfa-Béta miatt
+            if (boardSize == 5) return 4; // 5x5: Még mindig korlátozott
+            return 3; // Alapértelmezett nagyobb táblákra
         }
 
-        // Optimalizálás: A lehetséges lépések sorrendjének javítása (opcionális)
-        // Itt csak az üres mezőket adja vissza, de lehetne prioritizálni (pl. közép)
-        private IEnumerable<Place> GetPossibleMoves(ObservableCollection<Place> board, int boardSize)
+        private IEnumerable<int> GetOptimizedPossibleMoves(IconType[] board, int boardSize)
         {
-            // Egyszerűen visszaadja az összes üres mezőt
-            return board.Where(p => p.IsEmpty);
-            // TODO: Opcionális optimalizálás: középső mezők, sarokmezők prioritizálása
+            List<int> moves = new List<int>();
+            int center = -1;
+            if (boardSize % 2 != 0) // Csak páratlan méretű táblán van középső mező
+            {
+                center = (board.Length - 1) / 2;
+                if (board[center] == IconType.None)
+                {
+                    yield return center; // Először a középső
+                }
+            }
+
+            // Sarkok (prioritással)
+            int[] corners = { 0, boardSize - 1, boardSize * (boardSize - 1), boardSize * boardSize - 1 };
+            foreach (int corner in corners)
+            {
+                if (corner != center && board[corner] == IconType.None)
+                {
+                    yield return corner;
+                }
+            }
+
+            // Többi mező (sorrendben)
+            for (int i = 0; i < board.Length; i++)
+            {
+                // Ha nem a közép, nem sarok, és üres
+                if (i != center && !corners.Contains(i) && board[i] == IconType.None)
+                {
+                    yield return i;
+                }
+            }
         }
     }
 }
