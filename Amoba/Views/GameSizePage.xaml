@@ -6,26 +6,39 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     xmlns:local="using:Amoba.Views"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-    d:DesignWidth="525">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <Grid Width="450" Padding="0, 20, 0, 0">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+    <Grid Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Válassz pályaméretet"
+                   Style="{ThemeResource TitleTextBlockStyle}" 
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,40"/>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+
             <Button 
                 Height="70" Width="70" 
-                Content="3" 
-                Margin="0,0,30,0" 
-                FontSize="30"  
-                Command="{Binding SelectSize}" 
+                Content="3 x 3" 
+                Margin="0,0,20,0" FontSize="20" Command="{Binding SelectSize}" 
                 CommandParameter="3"
                 IsEnabled="{Binding Enabled}"
                 Background="{ThemeResource SystemControlHighlightAccentBrush}"
                 Foreground="White"/>
+
             <Button 
                 Height="70" Width="70" 
-                Content="4"  
-                Margin="0,0,30,0" 
-                FontSize="30" 
+                Content="4 x 4" 
+                Margin="0,0,20,0" 
+                FontSize="20" 
                 Command="{Binding SelectSize}" 
                 CommandParameter="4"
                 IsEnabled="{Binding Enabled}"
@@ -34,9 +47,9 @@
 
             <Button 
                 Height="70" Width="70" 
-                Content="5" 
+                Content="5 x 5" 
                 Margin="0,0,0,0" 
-                FontSize="30" 
+                FontSize="20" 
                 Command="{Binding SelectSize}" 
                 CommandParameter="5"
                 IsEnabled="{Binding Enabled}"
