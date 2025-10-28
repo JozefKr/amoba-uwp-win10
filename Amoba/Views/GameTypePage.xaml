@@ -6,31 +6,50 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     xmlns:local="using:Amoba.Views"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-    d:DesignHeight="325" d:DesignWidth="525">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <Grid>
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Grid Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Válassz játékmódot"
+                   Style="{ThemeResource TitleTextBlockStyle}" 
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,40"/>
+
+        <StackPanel Grid.Row="1"
+                    HorizontalAlignment="Stretch" 
+                    VerticalAlignment="Center"
+                    MaxWidth="400">
+
             <Button
                 x:Name="isVsPlayer" 
                 Content="Játékos ellen" 
                 FontSize="20" 
                 Margin="0,0,0,20" 
                 Command="{Binding IsVsPlayer}"
-                Width="375" Height="40"
+                
+                MinHeight="50"
+                
                 HorizontalAlignment="Stretch"
                 Background="{ThemeResource SystemControlHighlightAccentBrush}"
                 Foreground="White" />
+
             <Button
                 x:Name="isVsComputer" 
                 Content="Számítógép ellen" 
                 FontSize="20" 
                 Margin="0,0,0,20" 
                 Command="{Binding IsVsComputer}"
-                Width="375" Height="40"
+                
+                MinHeight="50"
                 HorizontalAlignment="Stretch"
                 Background="{ThemeResource SystemControlHighlightAccentBrush}"
                 Foreground="White" />
+
         </StackPanel>
     </Grid>
 </local:BasePage>
