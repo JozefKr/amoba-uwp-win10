@@ -45,7 +45,8 @@
 
         <StackPanel VerticalAlignment="Center"
                     HorizontalAlignment="Stretch"
-                    Margin="20,0">
+                    Margin="20,0"
+                    MaxWidth="400">
             <Button
                 x:Name="newgame" 
                 Content="Új játék" 
