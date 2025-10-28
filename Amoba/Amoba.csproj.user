@@ -15,5 +15,11 @@
     <SplashScreenSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</SplashScreenSource>
     <AppIconSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</AppIconSource>
     <BadgeLogoSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</BadgeLogoSource>
+    <MediumTileSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</MediumTileSource>
+    <SmallTileSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</SmallTileSource>
+    <WideTileSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</WideTileSource>
+    <Source>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</Source>
+    <LargeTileSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</LargeTileSource>
+    <PackageLogoSource>D:\WORK\REPO\GITHUB\amoba-uwp-win10\Amoba\Assets\Images\game_logo.png</PackageLogoSource>
   </PropertyGroup>
 </Project>
