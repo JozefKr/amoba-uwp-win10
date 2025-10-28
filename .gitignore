@@ -1,62 +1,83 @@
-Binaries for release and debug
-
-[Bb]in/
-[Oo]bj/
-
-Log files and Temp files
-
-[Tt]emp/
-*.[Tt]mp
-*.[Ll]og
-*.[Ss]wf
-
-Visual Studio user and cache files
+User-specific files
 
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
-*.vshost.exe
-*.vshost.exe.config
+
+Build results
+
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+Visual Studio files
+
+.vs/
+*.opensdf
+*.sdf
 *.cache
-*.pdf
+*.VC.db
+*.VC.VC.opendb
 
-NuGet files
+SQLite temporary files (often in .vs or elsewhere)
 
-*.nupkg
+*.db-journal
+*.db-shm
+*.db-wal
+*.lock
+*.ide
+*.ide-shm
+*.ide-wal
 
-Exclude packages directory (if it exists outside the solution)
+NuGet packages
 
 packages/
+*.nupkg
 
-Resharper és más IDE fájlok
+Exclude the packages directory, whilst keeping packages.config
 
-*.resharper
-*.vspscc
-*.vssscc
-*.bak
-.old
-_ReSharper/
+/packages/
+!*/packages/packages.config
 
-Visual Studio Code
+NuGet v3 build cache and generated files
 
-.vscode/
+*.nuget.cache
+*.nuget.g.props
+*.nuget.g.targets
 
-Build and Deployment
+ReSharper files
 
-[Dd]rop/
-[Pp]ublish/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
 
-Local settings file
+Other Tooling files
 
-localsettings.json
+*.dbmdl
+*.jfm
+*.pfx
+*.publishsettings
 
-Azure / Cloud Service
+Other miscellaneous files
 
-*.cscfg
-*.csdef
+*.vsix
+*.vspackage
+*.vsmacros
 
-(A .vs mappa belsejében lévõ SQLite3 fájlok kizárása, pl. db.lock, storage.ide-shm)
-.vs//*.lock
-.vs//.ide-shm
-.vs/**/.ide-wal
+Keep AppxManifest.xml, these are important deploy assets
+
+!App.xaml
+!App.xaml.cs
+!Package.appxmanifest
+!*.[Cc]ertificate.pfx
+!Amoba_TemporaryKey.pfx
