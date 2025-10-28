@@ -24,9 +24,6 @@ namespace Amoba.ViewModel
         private ICommand _isVsComputer;
         public ICommand IsVsComputer => _isVsComputer ?? (_isVsComputer = new RelayCommand(SelectComputerMode));
 
-        private ICommand _exitApp;
-        public ICommand ExitApp => _exitApp ?? (_exitApp = new RelayCommand(ExitApplication));
-
         // Metódus a Játékos vs Játékos módhoz
         private void SelectPlayerMode()
         {
@@ -39,12 +36,6 @@ namespace Amoba.ViewModel
         {
             // Navigálunk a GameSizeViewModel-re, jelezve, hogy gép ellen játszunk
             _viewService.OpenPage<GameSizeViewModel>(new NamedParameter("isVsComputer", true));
-        }
-
-        // Metódus az alkalmazás bezárásához
-        private void ExitApplication()
-        {
-            CoreApplication.Exit();
         }
     }
 }

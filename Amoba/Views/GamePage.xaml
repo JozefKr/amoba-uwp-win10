@@ -6,118 +6,128 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:conv="using:Amoba.Converters"
     mc:Ignorable="d"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-    x:Name="PageRoot">
+    x:Name="PageRoot"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
-        <!-- Konverterek regisztrálása -->
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions" />
         <conv:TurnToColorConverter x:Key="turnToColor" />
 
-        <!-- VÉGLEGES Stílus a játéktábla gombjaihoz ControlTemplate-tel -->
         <Style x:Key="GameBoardButtonStyle" TargetType="Button">
-            <Setter Property="BorderBrush" Value="Black"/>
+            <Setter Property="Background" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}"/>
+            <Setter Property="BorderBrush" Value="{ThemeResource SystemControlForegroundBaseLowBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="VerticalAlignment" Value="Stretch"/>
-            <Setter Property="Margin" Value="5"/>
-            <!-- Explicit háttér a Style Setter-ben, ez lesz az alap, ha nincs kép -->
-            <Setter Property="Background" Value="LightGray"/>
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <!-- A Border adja a hátteret és keretet -->
-                        <Border x:Name="RootBorder" 
+                        <Border x:Name="RootBorder"
                                 Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}">
+
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0:0:0.1" To="1.0" />
-                                        </Storyboard>
-                                    </VisualState>
+                                    <VisualState x:Name="Normal" />
+
                                     <VisualState x:Name="PointerOver">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0:0:0.1" To="0.5" />
-                                        </Storyboard>
+                                        <VisualState.Setters>
+                                            <Setter Target="RootBorder.Background" Value="{ThemeResource SystemControlHighlightBaseMediumLowBrush}"/>
+                                        </VisualState.Setters>
                                     </VisualState>
+
                                     <VisualState x:Name="Pressed">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0:0:0.1" To="0.8" />
-                                        </Storyboard>
+                                        <VisualState.Setters>
+                                            <Setter Target="RootBorder.Background" Value="{ThemeResource SystemControlHighlightBaseMediumBrush}"/>
+                                        </VisualState.Setters>
                                     </VisualState>
+
                                     <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Background">
-                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#33999999"/>
-                                            </ObjectAnimationUsingKeyFrames>
-                                            <DoubleAnimation Storyboard.TargetName="RootBorder" Storyboard.TargetProperty="Opacity" Duration="0" To="0.5"/>
-                                        </Storyboard>
+                                        <VisualState.Setters>
+                                            <Setter Target="RootBorder.Background" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}"/>
+                                            <Setter Target="RootBorder.Opacity" Value="0.5"/>
+                                        </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
-                            <!-- Az Image elem MOST MÁR ITT VAN, a Border-en BELÜL -->
-                            <!-- Ez jeleníti meg az X/O képet, ha az Image nem null -->
+
                             <Image Source="{Binding Image}" Stretch="Uniform" Margin="5"/>
-                            <!-- A ContentPresenter itt már nem szükséges, ha csak képet jelenítünk meg -->
-                            <!-- <ContentPresenter ... /> -->
+
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
     </Page.Resources>
-    <Grid>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
 
-            <!-- 1. Játéktábla (ItemsControl) -->
-            <ItemsControl 
-                ItemsSource="{Binding Places}" 
-                Background="#808080" 
- 
-                Width="{Binding BoardSize, Converter={StaticResource placesToDimensions}}" 
-                Height="{Binding BoardSize, Converter={StaticResource placesToDimensions}}">
+    <Page.BottomAppBar>
+        <CommandBar Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}" 
+                    Opacity="0.9"
+                    ClosedDisplayMode="Compact">
+            <CommandBar.PrimaryCommands>
+                <AppBarButton Icon="Refresh" Label="Új Játék" Command="{Binding NewGameCommand}"/>
+            </CommandBar.PrimaryCommands>
+        </CommandBar>
+    </Page.BottomAppBar>
+    <Grid Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,40">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Margin="0,0,40,0" HorizontalAlignment="Right">
+                <TextBlock Text="JÁTÉKOS (X)" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+                <TextBlock Text="{Binding Player1Score}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer1Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <TextBlock Text="VS" Grid.Column="1" FontSize="32" FontWeight="Light" VerticalAlignment="Center" Margin="0,0,0,10" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+
+            <StackPanel Grid.Column="2" Margin="40,0,0,0" HorizontalAlignment="Left">
+                <TextBlock Text="JÁTÉKOS (O)" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+                <TextBlock Text="{Binding Player2Score}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer2Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <Viewbox Grid.Row="1" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+
+            <ItemsControl
+                x:Name="GameBoard"
+                ItemsSource="{Binding Places}"
+                Width="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
+                Height="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
+                Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}">
 
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <ItemsWrapGrid 
-                            Orientation="Horizontal" 
+                        <ItemsWrapGrid
+                            Orientation="Horizontal"
                             MaximumRowsOrColumns="{Binding BoardSize}" />
-                        <!-- A MaximumRowsOrColumns beállítása szükséges a rács méretéhez -->
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
 
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Button 
+                        <Button
                             Width="80" Height="80"
                             Style="{StaticResource GameBoardButtonStyle}"
                             Command="{Binding DataContext.SetImage, ElementName=PageRoot}"
-                            CommandParameter="{Binding}">
-                            <Grid>
-                            </Grid>
-                        </Button>
+                            CommandParameter="{Binding}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+        </Viewbox>
 
-            <!-- 2. Pontszám kijelzése -->
-            <StackPanel VerticalAlignment="Center" Margin="30,0,10,0">
-                <!-- Játékos 1 -->
-                <TextBlock Text="Játékos (X)" FontSize="20" FontWeight="Bold"
-                           Foreground="{Binding IsPlayer1Turn, Converter={StaticResource turnToColor}}"/>
-                <TextBlock Text="{Binding Player1Score}" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center"/>
-            </StackPanel>
-
-            <StackPanel VerticalAlignment="Center" Margin="10,0,0,0">
-                <!-- Játékos 2 -->
-                <TextBlock Text="Játékos (O)" FontSize="20" FontWeight="Bold"
-                           Foreground="{Binding IsPlayer2Turn, Converter={StaticResource turnToColor}}"/>
-                <TextBlock Text="{Binding Player2Score}" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center"/>
-            </StackPanel>
-
-        </StackPanel>
     </Grid>
 </Page>

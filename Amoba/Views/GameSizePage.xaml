@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     d:DesignWidth="525">
 
     <Grid Width="450" Padding="0, 20, 0, 0">
@@ -16,7 +17,8 @@
                 FontSize="30"  
                 Command="{Binding SelectSize}" 
                 CommandParameter="3"
-                Style="{StaticResource AccentButtonStyle}" />
+                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                Foreground="White"/>
             <Button 
                 Height="70" Width="70" 
                 Content="4"  
@@ -24,7 +26,8 @@
                 FontSize="30" 
                 Command="{Binding SelectSize}" 
                 CommandParameter="4" 
-                Style="{StaticResource AccentButtonStyle}" />
+                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                Foreground="White" />
 
             <Button 
                 Height="70" Width="70" 
@@ -33,7 +36,8 @@
                 FontSize="30" 
                 Command="{Binding SelectSize}" 
                 CommandParameter="5" 
-                Style="{StaticResource AccentButtonStyle}" />
+                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                Foreground="White" />
         </StackPanel>
     </Grid>
 </Page>

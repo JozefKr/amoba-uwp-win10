@@ -30,24 +30,6 @@ namespace Amoba.ViewModel
             }
         }
 
-        private ICommand exitApp;
-
-        public ICommand ExitApp
-        {
-            get
-            {
-                if (exitApp == null)
-                    exitApp = new RelayCommand(ExitAppMethod);
-                return exitApp;
-            }
-        }
-
-        private void ExitAppMethod()
-        {
-            // Kilépés az UWP alkalmazásból
-            CoreApplication.Exit();
-        }
-
         private void StartGameMethod()
         {
             viewService.OpenPage<GameTypeViewModel>();

@@ -24,14 +24,8 @@
                 Command="{Binding StartGame}"
                 Width="375" Height="40"
                 HorizontalAlignment="Stretch"
-                Style="{StaticResource AccentButtonStyle}" />
-            <Button 
-                x:Name="exit" 
-                Content="Kilépés" 
-                FontSize="20" 
-                Command="{Binding ExitApp}" 
-                Width="375" Height="40"
-                HorizontalAlignment="Stretch"/>
+                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                Foreground="White" />
         </StackPanel>
     </Grid>
 </Page>

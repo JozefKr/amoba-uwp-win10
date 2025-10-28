@@ -130,6 +130,7 @@
     <Compile Include="Services\GameLogic.cs" />
     <Compile Include="Services\IViewService.cs" />
     <Compile Include="Services\ViewService.cs" />
+    <Compile Include="Services\ViewServiceExtensions.cs" />
     <Compile Include="ViewModel\GameSizeViewModel.cs" />
     <Compile Include="ViewModel\GameTypeViewModel.cs" />
     <Compile Include="ViewModel\GameViewModel.cs" />

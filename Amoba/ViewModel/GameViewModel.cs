@@ -24,6 +24,7 @@ namespace Amoba.ViewModel
 
         private ObservableCollection<Place> places;
         private ICommand setImage;
+        private ICommand newGameCommand;
         private int boardSize;
         private AiPlayer aiPlayer;
 
@@ -125,6 +126,23 @@ namespace Amoba.ViewModel
                         p => p != null && p.IsEmpty && !isProcessingAiMove && (!isVsComputer || !isComputerTurn)
                     ));
             }
+        }
+
+        public ICommand NewGameCommand
+        {
+            get
+            {
+                return newGameCommand ??
+                    (newGameCommand = new RelayCommand(ExecuteNewGame));
+            }
+        }
+
+        private void ExecuteNewGame()
+        {
+            // Ez a metódus visszaállít mindent, a pontszámokat is.
+            Player1Score = 0;
+            Player2Score = 0;
+            ResetBoard(); // A ResetBoard már gondoskodik a tábla törléséről és a körök visszaállításáról
         }
 
         private void SetImageMethod(Place place)
