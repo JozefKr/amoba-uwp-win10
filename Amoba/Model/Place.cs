@@ -1,64 +1,91 @@
-﻿using GalaSoft.MvvmLight;
+﻿using GalaSoft.MvvmLight; // Szükséges a ViewModelBase miatt
 using System;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 
 namespace Amoba.Model
 {
-    // VÁLTOZÁS: A Place modellnek is jeleznie kell a változásait (INotifyPropertyChanged)
-    // A ViewModelBase-ből öröklés a legegyszerűbb módja ennek a GalaSoft-tal.
+    // Kiterjesztettük ViewModelBase-szel, hogy tudjon változásértesítést küldeni
+    // ICloneable interfészt ELTÁVOLÍTOTTUK
     public class Place : ViewModelBase
     {
-        private IconType? type;
-        private bool isEmpty = true;
-        private ImageSource image;
+        private bool _isEmpty;
+        private IconType _type; // Nullable helyett alapértelmezett None
+        private ImageSource _image;
+        private int _id;
 
         public Place()
         {
-            // Az IsEmpty alapértelmezett értéke már 'true' a backing field miatt
+            _isEmpty = true;
+            _type = IconType.None; // Alapértelmezett érték
         }
 
-        public int Id { get; set; }
+        public int Id
+        {
+            get => _id;
+            set => Set(ref _id, value);
+        }
 
+        // Image csak olvasható kívülről, a Type setter állítja be
         public ImageSource Image
         {
-            get => image;
-            private set => Set(ref image, value); // Használjuk a Set-et a UI frissítéséhez
+            get => _image;
+            private set => Set(ref _image, value);
         }
 
         public bool IsEmpty
         {
-            get => isEmpty;
+            get => _isEmpty;
+            set => Set(ref _isEmpty, value);
+        }
+
+        public IconType Type
+        {
+            get => _type;
             set
             {
-                Set(ref isEmpty, value);
-                // Frissítjük a 'SetImage' parancs CanExecute állapotát
-                RaisePropertyChanged(nameof(IsEmpty));
+                // A Set metódus kezeli a RaisePropertyChanged-et
+                if (Set(ref _type, value))
+                {
+                    // Ha a típus változik, frissítjük a képet és az IsEmpty állapotot
+                    UpdateImageAndState(value);
+                }
             }
         }
 
-        public IconType? Type
+        // Segédmetódus a kép és IsEmpty állapot frissítésére
+        private void UpdateImageAndState(IconType newType)
         {
-            get { return type; }
-            set
-            {
-                // Használjuk a Set-et, hogy a UI biztosan frissüljön
-                Set(ref type, value);
+            IsEmpty = (newType == IconType.None); // Csak akkor üres, ha None
 
-                // Az Image property frissítése (logika a régiből)
-                if (value == IconType.Circle)
-                {
-                    Image = new BitmapImage(new Uri("ms-appx:///Assets/Images/circle.png"));
-                }
-                else if (value == IconType.Cross)
-                {
-                    Image = new BitmapImage(new Uri("ms-appx:///Assets/Images/cross.png"));
-                }
-                else
-                {
-                    Image = null;
-                }
+            if (newType == IconType.Circle)
+            {
+                Image = new BitmapImage(new Uri("ms-appx:///Assets/Images/circle.png"));
             }
+            else if (newType == IconType.Cross)
+            {
+                Image = new BitmapImage(new Uri("ms-appx:///Assets/Images/cross.png"));
+            }
+            else // None esetén
+            {
+                Image = null;
+            }
+        }
+
+        // SAJÁT Clone metódus, ami nem használ ICloneable interfészt
+        // JAVÍTVA: A publikus property-ket használjuk a beállításhoz
+        public Place ClonePlace()
+        {
+            var clone = new Place();
+            clone.Id = this.Id;
+            // Fontos: Itt a Type property setterét kell hívni,
+            // hogy az UpdateImageAndState is lefusson a klónon!
+            clone.Type = this.Type;
+            // Az IsEmpty a Type setterében beállítódik, de explicit is beállíthatjuk
+            clone._isEmpty = this._isEmpty; // Itt a privát mező direkt beállítása még szükséges lehet
+                                            // mert a Type setter az IsEmpty-t a newType alapján állítja
+
+            return clone;
         }
     }
 }

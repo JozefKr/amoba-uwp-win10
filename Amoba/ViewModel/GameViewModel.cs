@@ -1,9 +1,12 @@
 ﻿using Amoba.Model;
+using Amoba.Services; // Szükséges az AiPlayer és a GameLogic eléréséhez
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics; // Hibakereséshez
 using System.Linq;
+using System.Threading.Tasks; // Aszinkron AI lépéshez
 using System.Windows.Input;
 
 namespace Amoba.ViewModel
@@ -12,11 +15,17 @@ namespace Amoba.ViewModel
     {
         private int player1Score;
         private int player2Score;
+
         private bool isPlayer1Turn;
         private bool isPlayer2Turn;
+        private bool isComputerTurn = false;
+        private bool isVsComputer; // Eltávolítottuk az alapértelmezett 'true'-t
+        private bool isProcessingAiMove = false;
+
         private ObservableCollection<Place> places;
         private ICommand setImage;
         private int boardSize;
+        private AiPlayer aiPlayer;
 
         public int BoardSize
         {
@@ -24,58 +33,85 @@ namespace Amoba.ViewModel
             set => Set(ref boardSize, value);
         }
 
+        // 1. Alapértelmezett konstruktor (Paraméter nélküli)
         public GameViewModel()
         {
-            InitializeViewModel(3);
+            // Alapértelmezett mód: Játékos vs Játékos, 3x3
+            InitializeViewModel(3, false);
         }
 
-        public GameViewModel(int boardSizeParam)
+        // 2. Paraméteres konstruktor (Ezt hívja a ViewService)
+        // MOST MÁR FOGADJA AZ isVsComputer PARAMÉTERT IS
+        public GameViewModel(int boardSizeParam, bool isVsComputerParam)
         {
-            InitializeViewModel(boardSizeParam);
+            InitializeViewModel(boardSizeParam, isVsComputerParam);
         }
 
-        private void InitializeViewModel(int boardSizeParam)
+        private void InitializeViewModel(int boardSizeParam, bool isVsComputerMode)
         {
-            this.BoardSize = boardSizeParam;
+            BoardSize = boardSizeParam;
+            this.isVsComputer = isVsComputerMode; // Eltároljuk a kapott játékmódot
+            aiPlayer = new AiPlayer();
+
             Places = new ObservableCollection<Place>();
             for (int i = 0; i < Math.Pow(this.BoardSize, 2); i++)
             {
-                Places.Add(new Place() { Id = i, Type = null });
+                // Biztosítjuk, hogy az alapértelmezett Type az IconType.None legyen
+                Places.Add(new Place() { Id = i, Type = IconType.None });
             }
-            IsPlayer1Turn = true;
-            IsPlayer2Turn = false;
+
             Player1Score = 0;
             Player2Score = 0;
+            IsPlayer1Turn = true; // Ember kezd (X)
+            IsPlayer2Turn = false;
+            isComputerTurn = false; // Kezdetben nem a gép jön
+
+            // Ha gép ellen játszunk ÉS a gép kezdene (O), itt lehetne indítani az AI-t
+            // if (this.isVsComputer && !IsPlayer1Turn) { TriggerAiMove(); }
         }
 
         public int Player2Score
         {
-            get { return player2Score; }
-            set { player2Score = value; RaisePropertyChanged(); }
+            get => player2Score;
+            set => Set(ref player2Score, value);
         }
 
         public int Player1Score
         {
-            get { return player1Score; }
-            set { player1Score = value; RaisePropertyChanged(); }
+            get => player1Score;
+            set => Set(ref player1Score, value);
         }
 
         public bool IsPlayer1Turn
         {
-            get { return isPlayer1Turn; }
-            set { isPlayer1Turn = value; RaisePropertyChanged(); }
+            get => isPlayer1Turn;
+            set => Set(ref isPlayer1Turn, value);
         }
 
         public bool IsPlayer2Turn
         {
-            get { return isPlayer2Turn; }
-            set { isPlayer2Turn = value; RaisePropertyChanged(); }
+            get => isPlayer2Turn;
+            set
+            {
+                // Használjuk a Set metódust, ami csak akkor futtatja a logikát, ha az érték tényleg változik
+                if (Set(ref isPlayer2Turn, value))
+                {
+                    // Ha gép ellen játszunk, és a 2. játékos (O, a gép) következik
+                    isComputerTurn = isVsComputer && value;
+                    if (isComputerTurn && !isProcessingAiMove) // Csak akkor indítjuk, ha nem fut már
+                    {
+                        // AI lépés indítása aszinkron módon
+                        TriggerAiMove();
+                    }
+                }
+            }
         }
 
         public ObservableCollection<Place> Places
         {
             get => places;
-            set { places = value; RaisePropertyChanged(); }
+            // Itt is a Set metódust használjuk a RaisePropertyChanged biztosításához
+            set => Set(ref places, value);
         }
 
         public ICommand SetImage
@@ -83,106 +119,148 @@ namespace Amoba.ViewModel
             get
             {
                 return setImage ??
-                    (setImage = new RelayCommand<Place>(SetImageMethod, p => { return p != null && p.IsEmpty; }));
+                    (setImage = new RelayCommand<Place>(
+                        SetImageMethod,
+                        // CanExecute: Csak akkor engedélyezett, ha a mező üres ÉS nem az AI lépése van folyamatban ÉS (Játékos vs Játékos MÓD VAGY NEM a gép jön)
+                        p => p != null && p.IsEmpty && !isProcessingAiMove && (!isVsComputer || !isComputerTurn)
+                    ));
             }
         }
 
         private void SetImageMethod(Place place)
         {
-            //Single() helyett FirstOrDefault() használata biztonságosabb
-            var pl = Places.FirstOrDefault(z => z.Id == place.Id);
-            if (pl == null || !pl.IsEmpty) // Ellenőrizzük, hogy a mező létezik és üres-e
+            // Extra védelem: Ha gép ellen játszunk és a gép jön, vagy már folyamatban van az AI lépés, vagy a hely érvénytelen, ne csináljunk semmit
+            if ((isVsComputer && isComputerTurn) || isProcessingAiMove || place == null || !place.IsEmpty)
             {
-                return; // Ha nem, ne csináljunk semmit
+                return;
             }
 
-            pl.IsEmpty = false;
-            pl.Type = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
+            // Emberi lépés végrehajtása
+            ExecuteMove(place, IsPlayer1Turn ? IconType.Cross : IconType.Circle);
+        }
 
-            var winner = CheckWinner();
-            //A tábla törlését külön metódusba szervezzük a jobb olvashatóságért
-            if (winner != -1 || Places.All(z => !z.IsEmpty)) // Használhatjuk az All()-t a tele tábla ellenőrzésére
+        // AI lépés indítása (aszinkron, hogy a UI ne fagyjon le)
+        private async void TriggerAiMove()
+        {
+            if (isProcessingAiMove || !isVsComputer || !isComputerTurn) return; // Extra védelem
+
+            isProcessingAiMove = true;
+            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok letiltása
+
+            await Task.Delay(200); // Rövid várakozás a jobb UX érdekében
+
+            try
             {
-                if (winner == 1) Player1Score++;
-                else if (winner == 2) Player2Score++;
+                Place bestMovePlace = aiPlayer.FindBestMove(new ObservableCollection<Place>(Places.Select(p => p.ClonePlace())), BoardSize); // Másolatot adunk át az AI-nak
 
-                ResetBoard(); // Tábla törlése és újraindítás
+                if (bestMovePlace != null)
+                {
+                    // Az eredeti kollekcióban keressük meg a megfelelő elemet az ID alapján
+                    var targetPlace = Places.FirstOrDefault(p => p.Id == bestMovePlace.Id);
+                    if (targetPlace != null && targetPlace.IsEmpty)
+                    {
+                        // Gép lépésének végrehajtása (mindig O)
+                        ExecuteMove(targetPlace, IconType.Circle);
+                    }
+                    else
+                    {
+                        Debug.WriteLine("AI által választott lépés már foglalt vagy érvénytelen.");
+                        // Itt lehetne alternatív lépést keresni, vagy csak kihagyni
+                        if (!Places.All(p => !p.IsEmpty)) // Ha még nincs tele a tábla
+                            ChangeTurn(); // Visszaadjuk a vezérlést az embernek? Vagy újra próbálkozzon az AI?
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("AI nem talált lépést (valószínűleg döntetlen vagy hiba).");
+                    // Ha nincs több lépés, a játék véget érhetett volna már az ExecuteMove-ban
+                    if (!Places.All(p => !p.IsEmpty))
+                        ChangeTurn(); // Visszaadjuk a vezérlést?
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"AI Hiba: {ex.Message}");
+                if (!Places.All(p => !p.IsEmpty))
+                    ChangeTurn(); // Hiba esetén is adjuk vissza a kört, ha még van hely
+            }
+            finally
+            {
+                isProcessingAiMove = false;
+                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok engedélyezése
+            }
+        }
+
+
+        // Közös lépés végrehajtó metódus (emberi és AI)
+        private void ExecuteMove(Place place, IconType type)
+        {
+            // Itt már a helyes Place objektumot kapjuk (FirstOrDefault ellenőrzés után)
+            if (place == null || !place.IsEmpty) return;
+
+            place.Type = type; // Ez aktiválja a PropertyChanged-et a Place modellen belül
+                               // place.IsEmpty = false; // Ezt a Place modell Type settere már megteheti
+
+            // Frissítjük a parancs futtathatóságát (az éppen megnyomott gomb letiltása)
+            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+
+            // Győztes ellenőrzése
+            var winner = GameLogic.CheckWinner(Places, BoardSize); // Statikus metódus használata
+            var isBoardFull = Places.All(p => !p.IsEmpty);
+
+            if (winner != IconType.None || isBoardFull)
+            {
+                // Játék vége üzenet (később lehet szebb UI)
+                string message = winner == IconType.Cross ? "Player 1 Wins!" :
+                                 winner == IconType.Circle ? (isVsComputer ? "Computer Wins!" : "Player 2 Wins!") :
+                                 "It's a Draw!";
+                Debug.WriteLine(message); // Ideiglenes kiírás
+
+                // Pontszám növelése
+                if (winner == IconType.Cross) Player1Score++;
+                else if (winner == IconType.Circle) Player2Score++;
+
+                // Tábla törlése - Helyesen, ObservableCollection elemeit módosítva
+                ResetBoard();
             }
             else
             {
-                ChangeTurn(); // Csak akkor váltunk kört, ha nincs vége a játéknak
+                // Következő kör
+                ChangeTurn();
             }
-
-            // JAVÍTÁS: Ez a sor hibás volt, ObservableCollection-t nem lehet így frissíteni.
-            // Az ObservableCollection magától kezeli a UI frissítést, ha az elemei változnak (INotifyPropertyChanged),
-            // vagy ha elemeket adunk hozzá/törlünk.
-            // Places = new ObservableCollection<Place>(Places); // <-- TÖRÖLVE!
         }
 
-        // ÚJ Metódus: A tábla törlése és alaphelyzetbe állítása
+        // Tábla törlése helyesen ObservableCollection esetén
         private void ResetBoard()
         {
-            // A Clear() helyett a foreach ciklus is működik, mert a Place implementálja az INotifyPropertyChanged-et
-            foreach (var item in Places)
+            // Rövid késleltetés, hogy a felhasználó lássa a végeredményt
+            // Ezt egy szebb UI megoldással (pl. Dialog) kellene helyettesíteni
+            Task.Delay(1500).ContinueWith(_ => // Növelt késleltetés
             {
-                item.IsEmpty = true;
-                item.Type = null;
-            }
-            // Opcionálisan: Kezdjen újra az első játékos
-            IsPlayer1Turn = true;
-            IsPlayer2Turn = false;
+                // UI szálra kell visszatérni a kollekció módosításához!
+                GalaSoft.MvvmLight.Threading.DispatcherHelper.CheckBeginInvokeOnUI(() =>
+                {
+                    foreach (var place in Places)
+                    {
+                        place.Type = IconType.None; // Visszaállítjuk None-ra
+                        // place.IsEmpty = true; // Ezt a Place modell Type settere megteheti
+                    }
+                    IsPlayer1Turn = true; // Ember kezd újra (általában)
+                    IsPlayer2Turn = false;
+                    isComputerTurn = false;
+                    isProcessingAiMove = false;
+                    (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok frissítése
+                });
+            });
         }
 
 
         private void ChangeTurn()
         {
+            // Egyszerű váltás
             IsPlayer1Turn = !IsPlayer1Turn;
+            // A IsPlayer2Turn Property settere automatikusan kezeli az AI indítását
             IsPlayer2Turn = !IsPlayer1Turn;
-        }
-
-        private int CheckWinner()
-        {
-            int winner = -1;
-            int n = BoardSize; // Egyszerűsítés
-            double nSquared = Math.Pow(n, 2);
-
-            // Sorok ellenőrzése
-            for (int row = 0; row < n; row++)
-            {
-                var currentRow = Places.Skip(row * n).Take(n);
-                if (currentRow.All(p => p.Type == IconType.Circle)) return 2;
-                if (currentRow.All(p => p.Type == IconType.Cross)) return 1;
-            }
-
-            // Oszlopok ellenőrzése
-            for (int col = 0; col < n; col++)
-            {
-                var currentCol = Places.Where((p, index) => index % n == col);
-                if (currentCol.All(p => p.Type == IconType.Circle)) return 2;
-                if (currentCol.All(p => p.Type == IconType.Cross)) return 1;
-            }
-
-            // Átlók ellenőrzése
-            var diag1 = Places.Where((p, index) => index % (n + 1) == 0);
-            if (diag1.All(p => p.Type == IconType.Circle)) return 2;
-            if (diag1.All(p => p.Type == IconType.Cross)) return 1;
-
-            // Csak négyzetes táblán van értelme a másik átlónak
-            if (n > 1)
-            {
-                var diag2 = Places.Where((p, index) => index != 0 && index != nSquared - 1 && index % (n - 1) == 0);
-                // Korrekció: Az első és utolsó elem kimarad a fenti logikából n>2 esetén, külön kell ellenőrizni,
-                // vagy a Places[n-1] ... Places[nSquared-n] elemeket kell nézni (n-1)-es lépésközzel.
-                // Egyszerűbb LINQ az átlóhoz:
-                var diag2Indices = Enumerable.Range(0, n).Select(i => (i + 1) * (n - 1));
-                var diag2Correct = Places.Where((p, index) => diag2Indices.Contains(index));
-
-                if (diag2Correct.All(p => p.Type == IconType.Circle)) return 2;
-                if (diag2Correct.All(p => p.Type == IconType.Cross)) return 1;
-            }
-
-
-            return winner; // -1, ha nincs győztes
         }
     }
 }

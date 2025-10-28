@@ -50,7 +50,7 @@ namespace Amoba.ViewModel
 
         private void StartGameMethod()
         {
-            viewService.OpenPage<GameSizeViewModel>();
+            viewService.OpenPage<GameTypeViewModel>();
         }
     }
 }

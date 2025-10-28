@@ -1,5 +1,6 @@
 ﻿using Amoba.Services;
 using Autofac;
+using Autofac.Core; // Szükséges a Parameter és NamedParameter típusokhoz
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using System;
@@ -10,14 +11,17 @@ namespace Amoba.ViewModel
     public class GameSizeViewModel : ViewModelBase
     {
         private readonly IViewService _viewService;
+        private bool _isVsComputerMode; // Új mező a játékmód tárolására
 
-        // A DI-n keresztül megkapja a navigációs szolgáltatást.
-        public GameSizeViewModel(IViewService viewService)
+        // Módosított konstruktor: Megkapja a viewService-t ÉS az isVsComputer paramétert
+        public GameSizeViewModel(IViewService viewService, bool isVsComputer)
         {
             _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
+            _isVsComputerMode = isVsComputer; // Eltároljuk a kapott játékmódot
             Enabled = true;
         }
 
+        // --- A többi tulajdonság (Enabled, SelectSize) változatlan ---
         private ICommand _selectSize;
         public ICommand SelectSize
         {
@@ -39,21 +43,22 @@ namespace Amoba.ViewModel
                 RaisePropertyChanged();
             }
         }
+        // --- Változatlan tulajdonságok vége ---
+
 
         private void SelectSizeMethod(string size)
         {
             if (int.TryParse(size, out int boardSize) && boardSize > 0)
             {
-                // A méret kiválasztása megtörtént.
-                // Most azonnal navigálunk a GameViewModel-re (GamePage).
+                // Létrehozzuk a két NamedParameter objektumot a helyes nevekkel
+                var sizeParam = new NamedParameter("boardSizeParam", boardSize);
+                var modeParam = new NamedParameter("isVsComputerParam", _isVsComputerMode);
 
-                // Mivel a GameViewModel egy pozicionális paramétert (int gameSize) vár,
-                // a TypedParameter a legmegfelelőbb megoldás a DI-ben.
-                var param = new TypedParameter(typeof(int), boardSize);
+                // Explicit Parameter tömb létrehozása
+                var parameters = new Parameter[] { sizeParam, modeParam };
 
-                // A ViewService.OpenPage feloldása mostantól a TypedParameter-t kapja meg.
-                // A paramétert egy tömbbe csomagoljuk, hogy a ViewService a megfelelő túlterhelést válassza.
-                _viewService.OpenPage<GameViewModel>(new NamedParameter("boardSizeParam", boardSize));
+                // Közvetlenül az IViewService OpenPage(params Parameter[] parameters) metódusát hívjuk meg
+                _viewService.OpenPage<GameViewModel>(parameters);
             }
         }
     }

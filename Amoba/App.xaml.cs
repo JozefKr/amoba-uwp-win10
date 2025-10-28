@@ -1,6 +1,7 @@
 ﻿using Amoba.Services;
 using Amoba.ViewModel;
 using Autofac;
+using GalaSoft.MvvmLight.Threading;
 using System;
 using System.Diagnostics; // Szükséges a Debug.WriteLine használatához
 using Windows.ApplicationModel; // Szükséges az OnSuspending-hez
@@ -74,43 +75,61 @@ namespace Amoba
         // --- EDDIG ---
 
 
-        // A WPF OnStartup helyett UWP-ben az OnLaunched eseményt használjuk.
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
             Frame rootFrame = Window.Current.Content as Frame;
 
-            // Ne hozzon létre Frame-et, ha az már létezik
+            IContainer container = null; // Konténer változó
+
             if (rootFrame == null)
             {
-                // Hozza létre a fő navigációs Frame-et
                 rootFrame = new Frame();
+                // ... egyéb Frame beállítások ...
 
-                // Navigációs hibák kezelése
-                rootFrame.NavigationFailed += OnNavigationFailed;
+                // 1. Bootstrapper hívása, ami visszaadja a konténert
+                container = Bootstrapper.Bootstrap(rootFrame);
 
-                // --- 1. KONTÉNER INICIALIZÁLÁSA ---
-                // Fontos: A Frame referenciát át kell adni a Bootstrapper-nek,
-                // hogy a ViewService helyesen tudjon inicializálódni.
-                // A Bootstrapper metódus aláírásának meg kell felelnie ennek: Bootstrapper.Bootstrap(rootFrame)
-                Container = Bootstrapper.Bootstrap(rootFrame);
-
-                // Helyezze a Frame-et az aktuális ablakba
                 Window.Current.Content = rootFrame;
             }
+            else
+            {
+                // Ha a Frame már létezik, akkor is szükségünk van a konténerre
+                // Feltételezzük, hogy a konténer már létezik valahol, pl. egy statikus property-ben,
+                // vagy újra kell bootstrap-elni (ez az egyszerűbb példa kedvéért)
+                if (container == null) // Csak ha még nem hoztuk létre
+                {
+                    container = Bootstrapper.Bootstrap(rootFrame);
+                }
+            }
 
-            // --- 2. AZ ELSŐ NÉZET MEGJELENÍTÉSE ---
 
-            // Ha a Frame még nem tartalmaz Page-et, navigálunk az első oldalra.
             if (e.PrelaunchActivated == false)
             {
-                if (rootFrame.Content == null)
+                // 2. A viewService feloldása a konténerből
+                // Fontos: A container NEM LEHET null itt!
+                IViewService viewService = null;
+                if (container != null)
                 {
-                    // WPF: Container.Resolve<IViewService>().OpenWindow<MainViewModel>();
-                    // UWP: Navigáció az első Page-re a ViewService segítségével
-                    Container.Resolve<IViewService>().OpenPage<MainViewModel>();
+                    viewService = container.Resolve<IViewService>();
+                }
+                else
+                {
+                    // Hiba: A konténer nem jött létre megfelelően
+                    throw new InvalidOperationException("Dependency injection container is not initialized.");
                 }
 
-                // Győződjön meg róla, hogy az aktuális ablak aktív
+
+                if (rootFrame.Content == null)
+                {
+                    // 3. Navigálás a kezdőoldalra a viewService segítségével
+                    // A viewService már NEM LEHET null itt
+                    viewService?.OpenPage<MainViewModel>(); // Használjuk a feloldott viewService-t
+                }
+
+                // 4. DispatcherHelper inicializálása
+                DispatcherHelper.Initialize();
+
+                // 5. Ablak aktiválása
                 Window.Current.Activate();
             }
         }

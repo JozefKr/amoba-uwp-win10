@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:conv="using:Amoba.Converters"    
+    xmlns:conv="using:Amoba.Converters"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     x:Name="PageRoot">
@@ -106,14 +106,14 @@
             <!-- 2. Pontszám kijelzése -->
             <StackPanel VerticalAlignment="Center" Margin="30,0,10,0">
                 <!-- Játékos 1 -->
-                <TextBlock Text="Player 1" FontSize="20" FontWeight="Bold"
+                <TextBlock Text="Játékos (X)" FontSize="20" FontWeight="Bold"
                            Foreground="{Binding IsPlayer1Turn, Converter={StaticResource turnToColor}}"/>
                 <TextBlock Text="{Binding Player1Score}" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center"/>
             </StackPanel>
 
             <StackPanel VerticalAlignment="Center" Margin="10,0,0,0">
                 <!-- Játékos 2 -->
-                <TextBlock Text="Player 2" FontSize="20" FontWeight="Bold"
+                <TextBlock Text="Játékos (O)" FontSize="20" FontWeight="Bold"
                            Foreground="{Binding IsPlayer2Turn, Converter={StaticResource turnToColor}}"/>
                 <TextBlock Text="{Binding Player2Score}" FontSize="25" FontWeight="Bold" HorizontalAlignment="Center"/>
             </StackPanel>

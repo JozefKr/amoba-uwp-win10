@@ -10,9 +10,7 @@ namespace Amoba.Services
     {
         void RegisterPage(Type vm, Type page);
 
-        void OpenPage<T>(params NamedParameter[] parameters) where T : ViewModelBase;
-        //void OpenPage<TViewModel>(params Parameter[] parameters) where TViewModel : ViewModelBase;
-        // VAGY
-        //void OpenPage<TViewModel>(Parameter parameter) where TViewModel : ViewModelBase;
+        //void OpenPage<TViewModel>(params NamedParameter[] parameters) where TViewModel : ViewModelBase;
+        void OpenPage<TViewModel>(Parameter[] parameters) where TViewModel : ViewModelBase;
     }
 }

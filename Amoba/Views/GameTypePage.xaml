@@ -1,27 +1,30 @@
 ﻿<Page
-    x:Class="Amoba.ViewModel.MainPage"
+    x:Class="Amoba.ViewModel.GameTypePage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:conv="using:Amoba.Converters"
-    xmlns:local="using:Amoba"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     d:DesignHeight="325" d:DesignWidth="525">
 
-    <Page.Resources>
-        <conv:PlacesToDimensionsConverter x:Key="placesToDimensions"/>
-    </Page.Resources>
-
     <Grid>
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
             <Button
-                x:Name="newgame" 
-                Content="Új játék" 
+                x:Name="isVsPlayer" 
+                Content="Játékos ellen" 
                 FontSize="20" 
                 Margin="0,0,0,20" 
-                Command="{Binding StartGame}"
+                Command="{Binding IsVsPlayer}"
+                Width="375" Height="40"
+                HorizontalAlignment="Stretch"
+                Style="{StaticResource AccentButtonStyle}" />
+            <Button
+                x:Name="isVsComputer" 
+                Content="Számítógép ellen" 
+                FontSize="20" 
+                Margin="0,0,0,20" 
+                Command="{Binding IsVsComputer}"
                 Width="375" Height="40"
                 HorizontalAlignment="Stretch"
                 Style="{StaticResource AccentButtonStyle}" />
