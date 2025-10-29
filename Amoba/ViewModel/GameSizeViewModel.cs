@@ -1,6 +1,6 @@
 ﻿using Amoba.Services;
 using Autofac;
-using Autofac.Core; // Szükséges a Parameter és NamedParameter típusokhoz
+using Autofac.Core;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using System;
@@ -11,56 +11,81 @@ namespace Amoba.ViewModel
     public class GameSizeViewModel : ViewModelBase
     {
         private readonly IViewService _viewService;
-        private bool _isVsComputerMode; // Új mező a játékmód tárolására
+        private readonly INetworkService _networkService; // ÚJ: Hálózati szolgáltatás
+        private bool _isVsComputerMode;
+        private bool _isNetworkGame; //Állapotjelző
 
-        // Módosított konstruktor: Megkapja a viewService-t ÉS az isVsComputer paramétert
-        public GameSizeViewModel(IViewService viewService, bool isVsComputer)
+        // Módosított konstruktor: Most már 3 paramétert fogad
+        public GameSizeViewModel(IViewService viewService, INetworkService networkService, bool isVsComputer, bool isNetworkGame = false)
         {
             _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
-            _isVsComputerMode = isVsComputer; // Eltároljuk a kapott játékmódot
+            _networkService = networkService ?? throw new ArgumentNullException(nameof(networkService));
+
+            _isVsComputerMode = isVsComputer;
+            _isNetworkGame = isNetworkGame; // Rögzítjük, hogy hálózati módban vagyunk-e
+
             Enabled = true;
         }
 
-        // --- A többi tulajdonság (Enabled, SelectSize) változatlan ---
-        private ICommand _selectSize;
-        public ICommand SelectSize
+        // ÚJ KONSTRUKTOR: EZT FOGJA HÍVNI AZ AUTOFAC A HELYI/AI JÁTÉKHOZ
+        // (Ahol csak a két bool paraméter érkezik)
+        public GameSizeViewModel(IViewService viewService, bool isVsComputer, bool isNetworkGame = false)
         {
-            get
-            {
-                if (_selectSize == null)
-                    _selectSize = new RelayCommand<string>(SelectSizeMethod);
-                return _selectSize;
-            }
+            _viewService = viewService;
+            _isVsComputerMode = isVsComputer;
+            _isNetworkGame = isNetworkGame; // Ez most false
+            _networkService = null; // Biztos, ami biztos: null-ra állítjuk
+            Enabled = true;
         }
 
+        // ... (Enabled property változatlan) ...
         private bool _enabled;
         public bool Enabled
         {
             get { return _enabled; }
             set => Set(ref _enabled, value);
         }
-        // --- Változatlan tulajdonságok vége ---
 
-
-        private void SelectSizeMethod(string size)
+        // ... (SelectSize ICommand változatlan) ...
+        private ICommand _selectSize;
+        public ICommand SelectSize
         {
-            // 1. Ha már le van tiltva (dupla kattintás), ne csinálj semmit
+            get
+            {
+                if (_selectSize == null)
+                    // Megj.: RelayCommand<string> helyett RelayCommand<int> hasznosabb lenne, 
+                    // de maradunk a stringnél a kódkonzisztencia miatt.
+                    _selectSize = new RelayCommand<string>(SelectSizeMethod);
+                return _selectSize;
+            }
+        }
+
+        private async void SelectSizeMethod(string size) // A metódus most már ASZINKRON
+        {
             if (!Enabled) return;
 
             if (int.TryParse(size, out int boardSize) && boardSize > 0)
             {
-                // 2. Tiltás a navigáció előtt
-                Enabled = false;
+                Enabled = false; // Tiltás a navigáció előtt
+
+                // --- FONTOS LOGIKAI ELÁGAZÁS ---
+                if (_isNetworkGame && _networkService != null)
+                {
+                    // 1. ESET: HÁLÓZATI JÁTÉK (HOST KIVÁLASZT)
+                    // Küldjük el a méretet az ellenfélnek, majd navigálunk.
+                    // A SendBoardSizeAsync a NetworkService-ben kell, hogy meghívja a START üzenetet is!
+                    await _networkService.SendBoardSizeAsync(boardSize);
+                }
+
+                // 2. ESET: HELYI VAGY AI JÁTÉK (És navigálunk)
+                // Ez az ág most már minden esetben lefut, de hálózati módban a fent küldött méret is itt továbbítódik.
 
                 var sizeParam = new NamedParameter("boardSizeParam", boardSize);
                 var modeParam = new NamedParameter("isVsComputerParam", _isVsComputerMode);
                 var parameters = new Parameter[] { sizeParam, modeParam };
 
                 _viewService.OpenPage<GameViewModel>(parameters);
-
-                // 3. A navigáció után már mindegy, de ha a felhasználó
-                // visszanavigál, a ViewModel konstruktora újra lefut
-                // és visszaállítja 'Enabled = true'-ra. Ez a logika így jó.
+                // A GameSizePage automatikusan visszaállítja az Enabled=true állapotot, ha visszanavigálunk.
             }
         }
     }

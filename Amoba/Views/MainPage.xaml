@@ -7,12 +7,12 @@
     mc:Ignorable="d"
     xmlns:conv="using:Amoba.Converters"
     xmlns:local="using:Amoba.Views"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-    d:DesignHeight="325" d:DesignWidth="525">
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
     
     <Page.Resources>
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions"/>
-
+        <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
         <Storyboard x:Name="FadeOutLogoStoryboard">
             <DoubleAnimation
                 Storyboard.TargetName="LogoImage"
@@ -30,33 +30,104 @@
             </ObjectAnimationUsingKeyFrames>
         </Storyboard>
     </Page.Resources>
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Viewbox 
             HorizontalAlignment="Center" 
             VerticalAlignment="Center"
             MaxWidth="400" 
             MaxHeight="400">
-
             <Image x:Name="LogoImage" 
-               Source="ms-appx:///Assets/Images/game_logo.png" 
-               Stretch="Uniform" 
-               Opacity="1.0" />
+                Source="ms-appx:///Assets/Images/game_logo.png" 
+                Stretch="Uniform" 
+                Opacity="1.0" />
         </Viewbox>
-
         <StackPanel VerticalAlignment="Center"
                     HorizontalAlignment="Stretch"
                     Margin="20,0"
                     MaxWidth="400">
+
+            <TextBlock Text="Amőba" 
+                       Style="{ThemeResource HeaderTextBlockStyle}"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,30"
+                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+
             <Button
                 x:Name="newgame" 
-                Content="Új játék" 
+                Content="Játék indítása (Helyi/AI)" 
                 FontSize="20" 
-                Margin="0,0,0,20" 
+                Margin="0,0,0,30" 
                 Command="{Binding StartGame}"
                 MinHeight="50"
                 HorizontalAlignment="Stretch"
                 Background="{ThemeResource SystemControlHighlightAccentBrush}"
                 Foreground="White" />
+
+            <TextBlock Text="— Hálózati játék —" 
+                       Style="{ThemeResource BaseTextBlockStyle}"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,20"
+                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+
+            <Button
+                x:Name="startHostingButton" 
+                Content="Játék Hostolása (Légy Te a Szerver)" 
+                FontSize="16" 
+                Margin="0,0,0,10" 
+                Command="{Binding StartHostingCommand}"
+                Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                HorizontalAlignment="Stretch"
+                MinHeight="40" />
+
+            <Button
+                x:Name="startDiscoveryButton" 
+                Content="Játékok Keresése" 
+                FontSize="16" 
+                Margin="0,0,0,20" 
+                Command="{Binding StartDiscoveryCommand}"
+                Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                HorizontalAlignment="Stretch"
+                MinHeight="40" />
+
+            <Button
+                x:Name="stopDiscoveryButton" 
+                Content="Keresés Leállítása" 
+                FontSize="16" 
+                Margin="0,0,0,20" 
+                Command="{Binding StopDiscoveryCommand}"
+                Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}"
+                HorizontalAlignment="Stretch"
+                Background="OrangeRed"
+                Foreground="White"
+                MinHeight="40" />
+
+            <TextBlock Text="{Binding HostingStatusMessage}"
+                       Foreground="Red"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,10"
+                       HorizontalAlignment="Center"
+                       Style="{ThemeResource BaseTextBlockStyle}"/>
+
+            <TextBlock Text="Talált Játékok:" 
+                       Style="{ThemeResource CaptionTextBlockStyle}"
+                       Margin="0,0,0,5"/>
+
+            <ListView ItemsSource="{Binding FoundGames}" 
+                      MaxHeight="200" 
+                      SelectionMode="None"
+                      Background="{ThemeResource SystemControlBackgroundBaseLowBrush}">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding DisplayName}"
+                                CommandParameter="{Binding}"
+                                HorizontalAlignment="Stretch"
+                                Style="{StaticResource TextBlockButtonStyle}"
+                                
+                                Command="{Binding DataContext.JoinGameCommand, ElementName=RootGrid}"/>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
         </StackPanel>
     </Grid>
 </local:BasePage>

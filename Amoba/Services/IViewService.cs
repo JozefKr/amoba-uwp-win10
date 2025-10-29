@@ -1,5 +1,4 @@
-﻿using Autofac;
-using Autofac.Core;
+﻿using Autofac.Core;
 using GalaSoft.MvvmLight;
 using System;
 
