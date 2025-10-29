@@ -1,35 +1,38 @@
 ﻿using Amoba.Model;
-using System.Collections.ObjectModel;
-using System.Linq;
+using System.Collections.Generic;
 
-namespace Amoba.Services // Névtér frissítve
+namespace Amoba.Services
 {
-    // Segédosztály a játéklogika (győztes ellenőrzés) kiszervezéséhez
-    // Így az AiPlayer és a GameViewModel is használhatja
     public static class GameLogic
     {
-        // Visszatérési érték: IconType.Cross (1. nyert), IconType.Circle (2. nyert), IconType.None (senki)
-        public static IconType CheckWinner(ObservableCollection<Place> places, int boardSize)
+        // 1. VERZIÓ: ViewModel használja. ObservableCollection is kompatibilis.
+        public static IconType CheckWinner(IReadOnlyList<Place> places, int boardSize)
         {
-            if (places == null || places.Count != boardSize * boardSize) return IconType.None; // Ellenőrzés
-
-            IconType currentWinner = IconType.None;
+            if (places == null || places.Count != boardSize * boardSize) return IconType.None;
 
             // Sorok ellenőrzése
             for (int row = 0; row < boardSize; row++)
             {
-                var firstType = places[row * boardSize].Type;
-                if (firstType != IconType.None && places.Skip(row * boardSize).Take(boardSize).All(p => p.Type == firstType))
+                IconType firstType = places[row * boardSize].Type;
+                if (firstType != IconType.None)
                 {
-                    currentWinner = firstType;
-                    goto EndCheck; // Ha van győztes, felesleges tovább keresni
+                    bool win = true;
+                    for (int col = 1; col < boardSize; col++)
+                    {
+                        if (places[row * boardSize + col].Type != firstType)
+                        {
+                            win = false;
+                            break;
+                        }
+                    }
+                    if (win) return firstType;
                 }
             }
 
             // Oszlopok ellenőrzése
             for (int col = 0; col < boardSize; col++)
             {
-                var firstType = places[col].Type;
+                IconType firstType = places[col].Type;
                 if (firstType != IconType.None)
                 {
                     bool win = true;
@@ -41,17 +44,12 @@ namespace Amoba.Services // Névtér frissítve
                             break;
                         }
                     }
-                    if (win)
-                    {
-                        currentWinner = firstType;
-                        goto EndCheck;
-                    }
+                    if (win) return firstType;
                 }
             }
 
-            // Átlók ellenőrzése
             // Főátló (bal fent -> jobb lent)
-            var mainDiagType = places[0].Type;
+            IconType mainDiagType = places[0].Type;
             if (mainDiagType != IconType.None)
             {
                 bool win = true;
@@ -63,38 +61,29 @@ namespace Amoba.Services // Névtér frissítve
                         break;
                     }
                 }
-                if (win)
-                {
-                    currentWinner = mainDiagType;
-                    goto EndCheck;
-                }
+                if (win) return mainDiagType;
             }
 
             // Mellékátló (jobb fent -> bal lent)
-            var antiDiagType = places[boardSize - 1].Type;
+            IconType antiDiagType = places[boardSize - 1].Type;
             if (antiDiagType != IconType.None)
             {
                 bool win = true;
                 for (int i = 1; i < boardSize; i++)
                 {
-                    // Index számítás javítása a mellékátlóhoz
                     if (places[i * boardSize + (boardSize - 1 - i)].Type != antiDiagType)
                     {
                         win = false;
                         break;
                     }
                 }
-                if (win)
-                {
-                    currentWinner = antiDiagType;
-                    goto EndCheck;
-                }
+                if (win) return antiDiagType;
             }
 
-        EndCheck: // Címke a goto-hoz
-            return currentWinner; // Visszaadjuk a talált győztest vagy None-t
+            return IconType.None;
         }
 
+        // 2. VERZIÓ: AI használja. Optimalizálva IconType[] tömbhöz.
         public static IconType CheckWinner(IconType[] board, int boardSize)
         {
             if (board == null || board.Length != boardSize * boardSize) return IconType.None;
@@ -113,7 +102,7 @@ namespace Amoba.Services // Névtér frissítve
                     if (win) return first;
                 }
             }
-            // Oszlopok (hasonlóan)
+            // Oszlopok
             for (int col = 0; col < boardSize; col++)
             {
                 IconType first = board[col];

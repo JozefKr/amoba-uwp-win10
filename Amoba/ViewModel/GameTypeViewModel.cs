@@ -28,14 +28,20 @@ namespace Amoba.ViewModel
         private void SelectPlayerMode()
         {
             // Navigálunk a GameSizeViewModel-re, jelezve, hogy NEM gép ellen játszunk
-            _viewService.OpenPage<GameSizeViewModel>(new NamedParameter("isVsComputer", false));
+            _viewService.OpenPage<GameSizeViewModel>(
+                new NamedParameter("isVsComputer", false),
+                new NamedParameter("isNetworkGame", false) // <<<-- ÚJ: EXPLICITEN HAMIS
+            );
         }
 
         // Metódus a Számítógép ellen módhoz
         private void SelectComputerMode()
         {
             // Navigálunk a GameSizeViewModel-re, jelezve, hogy gép ellen játszunk
-            _viewService.OpenPage<GameSizeViewModel>(new NamedParameter("isVsComputer", true));
+            _viewService.OpenPage<GameSizeViewModel>(
+                new NamedParameter("isVsComputer", true),
+                new NamedParameter("isNetworkGame", false) // <<<-- ÚJ: EXPLICITEN HAMIS
+            );
         }
     }
 }

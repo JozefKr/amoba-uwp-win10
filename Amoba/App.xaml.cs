@@ -6,7 +6,6 @@ using System;
 using System.Diagnostics; // Szükséges a Debug.WriteLine használatához
 using Windows.ApplicationModel; // Szükséges az OnSuspending-hez
 using Windows.ApplicationModel.Activation;
-using Windows.UI.Popups; // <-- MÓDOSÍTÁS: MessageDialog-hoz szükséges
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls; // Szükséges a Frame-hez
 using Windows.UI.Xaml.Navigation;
@@ -28,13 +27,10 @@ namespace Amoba
             this.InitializeComponent();
             this.Suspending += OnSuspending;
 
-            // --- BEILLESZTETT KÓD ---
             // Hozzáadunk egy eseménykezelőt a globális, nem kezelt kivételek elkapásához.
             this.UnhandledException += OnUnhandledException;
-            // --- EDDIG ---
         }
 
-        // --- BEILLESZTETT KÓD: EZ A METÓDUS KAPJA EL A KIVÉTELEKET ---
         /// <summary>
         /// Ez a metódus hívódik meg, ha az alkalmazásban bárhol
         /// egy nem kezelt (le nem kezelt) kivétel történik.
@@ -70,33 +66,34 @@ namespace Amoba
                 }
             }
             Debug.WriteLine("=================================================");
-            // --- MÓDOSÍTÁS VÉGE ---
         }
-        // --- EDDIG ---
-
 
         protected override void OnLaunched(LaunchActivatedEventArgs e)
         {
             Frame rootFrame = Window.Current.Content as Frame;
 
-            IContainer container = null; // Konténer változó
+            IContainer container = null;
 
+            // Létrehozzuk a Frame-et, ha nem létezik (első indítás)
             if (rootFrame == null)
             {
                 rootFrame = new Frame();
-                // ... egyéb Frame beállítások ...
+                // [1] DISPATCHER INITIALIZÁLÁSA: Azonnal, ahogy a Frame létrejött
+                DispatcherHelper.Initialize();
 
-                // 1. Bootstrapper hívása, ami visszaadja a konténert
+                // [2] BOOTSTRAPPER hívása (ami felhasználja a Frame-et és beállítja a szolgáltatásokat)
                 container = Bootstrapper.Bootstrap(rootFrame);
 
                 Window.Current.Content = rootFrame;
             }
             else
             {
-                // Ha a Frame már létezik, akkor is szükségünk van a konténerre
-                // Feltételezzük, hogy a konténer már létezik valahol, pl. egy statikus property-ben,
-                // vagy újra kell bootstrap-elni (ez az egyszerűbb példa kedvéért)
-                if (container == null) // Csak ha még nem hoztuk létre
+                // Ha a Frame már létezik (például suspend/resume esetén)
+                // [3] DISPATCHER INITIALIZÁLÁSA: Itt is megismételjük, ha az első if ág nem futott le
+                DispatcherHelper.Initialize();
+
+                // [4] Konténer feltételezett újrafeloldása (az egyszerűség kedvéért)
+                if (container == null)
                 {
                     container = Bootstrapper.Bootstrap(rootFrame);
                 }
@@ -105,31 +102,27 @@ namespace Amoba
 
             if (e.PrelaunchActivated == false)
             {
-                // 2. A viewService feloldása a konténerből
-                // Fontos: A container NEM LEHET null itt!
                 IViewService viewService = null;
+
                 if (container != null)
                 {
+                    // [5] SERVICES FELOLDÁSA
                     viewService = container.Resolve<IViewService>();
                 }
                 else
                 {
-                    // Hiba: A konténer nem jött létre megfelelően
+                    // Ez egy critical hiba, ha idáig eljutunk
                     throw new InvalidOperationException("Dependency injection container is not initialized.");
                 }
 
 
                 if (rootFrame.Content == null)
                 {
-                    // 3. Navigálás a kezdőoldalra a viewService segítségével
-                    // A viewService már NEM LEHET null itt
-                    viewService?.OpenPage<MainViewModel>(); // Használjuk a feloldott viewService-t
+                    // [6] NAVIGÁLÁS A KEZDŐOLDALRA
+                    viewService?.OpenPage<MainViewModel>();
                 }
 
-                // 4. DispatcherHelper inicializálása
-                DispatcherHelper.Initialize();
-
-                // 5. Ablak aktiválása
+                // [7] Ablak aktiválása
                 Window.Current.Activate();
             }
         }
@@ -142,7 +135,6 @@ namespace Amoba
             throw new Exception("Failed to load Page " + e.SourcePageType.FullName);
         }
 
-        // --- BEILLESZTETT KÓD (az App konstruktor hivatkozik rá) ---
         /// <summary>
         /// Invoked when application execution is being suspended. Application state is saved
         /// without knowing whether the application will be terminated or resumed with the contents
@@ -156,6 +148,5 @@ namespace Amoba
             //TODO: Save application state and stop any background activity
             deferral.Complete();
         }
-        // --- EDDIG ---
     }
 }

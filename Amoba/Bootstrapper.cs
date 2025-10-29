@@ -15,24 +15,55 @@ namespace Amoba
         {
             var builder = new ContainerBuilder();
 
+            // ===================================================================
             // 1. SERVICES ÉS CORE KOMPONENSEK REGISZTRÁLÁSA
+            // ===================================================================
+
+            // A ViewService regisztrálása (megvolt)
             builder.RegisterType<ViewService>()
                    .As<IViewService>()
                    .WithParameter("rootFrame", rootFrame)
                    .SingleInstance();
-     
-            // 2. VIEWMODEL-EK REGISZTRÁLÁSA
-            // Regisztrálja az összes ViewModelBase-ből származó típust (beleértve a MainViewModel-t is)
-            var currentAssembly = typeof(Bootstrapper).GetTypeInfo().Assembly;
 
-            // Regisztrálja az ÖSSZES ViewModelBase-ből származó típust.
-            //builder.RegisterTypes(currentAssembly.GetTypes().Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase) && z.Name != "GameViewModel").ToArray());
-            //builder.RegisterType<GameViewModel>().WithParameter(new NamedParameter("boardSizeParam", "size"));
-            builder.RegisterTypes(currentAssembly.GetTypes().Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase)).ToArray());
+            // --- HOZZÁADVA: Az INetworkService regisztrálása ---
+            // Megmondjuk az Autofac-nak, hogy ha INetworkService kell,
+            // akkor a NetworkService osztályból hozzon létre egyetlen példányt.
+            builder.RegisterType<NetworkService>()
+                   .As<INetworkService>()
+                   .SingleInstance();
+            // --- HOZZÁADÁS VÉGE ---
+
+
+            // ===================================================================
+            // 2. VIEWMODEL-EK REGISZTRÁLÁSA
+            // ===================================================================
+            // Ez a rész automatikusan regisztrálja az összes ViewModelBase-ből
+            // származó típust (MainViewModel, GameViewModel stb.)
+            var currentAssembly = typeof(Bootstrapper).GetTypeInfo().Assembly;
+            builder.RegisterTypes(currentAssembly.GetTypes()
+                   .Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase))
+                   .ToArray());
+
+            // --- FONTOS MEGEGYEZÉS ---
+            // A GameSizeViewModel és GameViewModel konstruktorai paramétereket várnak
+            // (bool isVsComputer, int boardSizeParam). Az Autofac alapértelmezett
+            // regisztrációja ezeket nem tudja kezelni.
+            // A te ViewService.OpenPage<TViewModel>(params Parameter[] parameters)
+            // metódusod valószínűleg kezeli ezt a paraméterátadást futásidőben,
+            // ami egy valid megoldás. De ha problémád lenne a paraméteres
+            // konstruktorok aktiválásával, akkor itt lehetne őket expliciten
+            // regisztrálni delegátummal vagy lambda kifejezéssel.
+            // Egyelőre hagyjuk így, mert a hibád alapján csak az INetworkService hiányzott.
+            // -------------------------
+
 
             var container = builder.Build();
 
+            // ===================================================================
             // 3. VIEW/PAGE REGISZTRÁCIÓK (ViewModel -> View leképezés)
+            // ===================================================================
+            // Ez a rész a már felépült konténerből kéri el a ViewService-t,
+            // és beállítja a ViewModel-View párokat a navigációhoz.
             var viewService = container.Resolve<IViewService>();
 
             viewService.RegisterPage(typeof(MainViewModel), typeof(MainPage));

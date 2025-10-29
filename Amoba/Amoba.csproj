@@ -121,6 +121,7 @@
     </Compile>
     <Compile Include="Bootstrapper.cs" />
     <Compile Include="Converters\BooleanToVisibilityConverter.cs" />
+    <Compile Include="Converters\InverseBooleanToVisibilityConverter.cs" />
     <Compile Include="Converters\PlacesToDimensionsConverter.cs" />
     <Compile Include="Converters\TurnToColorConverter.cs" />
     <Compile Include="Model\GameType.cs" />
@@ -128,8 +129,12 @@
     <Compile Include="Model\Place.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AiPlayer.cs" />
+    <Compile Include="Services\GameFoundEventArgs.cs" />
     <Compile Include="Services\GameLogic.cs" />
+    <Compile Include="Services\GameStartedEventArgs.cs" />
+    <Compile Include="Services\INetworkService.cs" />
     <Compile Include="Services\IViewService.cs" />
+    <Compile Include="Services\NetworkService.cs" />
     <Compile Include="Services\ViewService.cs" />
     <Compile Include="Services\ViewServiceExtensions.cs" />
     <Compile Include="ViewModel\GameSizeViewModel.cs" />
