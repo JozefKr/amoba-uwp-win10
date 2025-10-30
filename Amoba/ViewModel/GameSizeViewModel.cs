@@ -1,91 +1,133 @@
 ﻿using Amoba.Services;
-using Autofac;
-using Autofac.Core;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
 using System;
+using System.Collections.Generic;
 using System.Windows.Input;
+using Autofac.Core;
+using Autofac;
 
 namespace Amoba.ViewModel
 {
+    /// <summary>
+    /// A ViewModel a tábla méretének kiválasztásához.
+    /// Különböző konstruktorokkal kezeli a helyi/AI és a hálózati (Host) indítási útvonalakat.
+    /// </summary>
     public class GameSizeViewModel : ViewModelBase
     {
         private readonly IViewService _viewService;
-        private readonly INetworkService _networkService; // ÚJ: Hálózati szolgáltatás
+        private readonly INetworkService _networkService; // Ez null lehet helyi/AI módban
         private bool _isVsComputerMode;
-        private bool _isNetworkGame; //Állapotjelző
+        private bool _isNetworkGame; // Jelzi, hogy Hostként vagyunk-e itt
+        private string _statusMessage = string.Empty;
 
-        // Módosított konstruktor: Most már 3 paramétert fogad
-        public GameSizeViewModel(IViewService viewService, INetworkService networkService, bool isVsComputer, bool isNetworkGame = false)
+        /// <summary>
+        /// Konstruktor HÁLÓZATI (Host) indításhoz. A DI konténer ezt hívja, ha minden paraméter elérhető.
+        /// </summary>
+        public GameSizeViewModel(IViewService viewService, INetworkService networkService, bool isVsComputer, bool isNetworkGame = true)
         {
             _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
-            _networkService = networkService ?? throw new ArgumentNullException(nameof(networkService));
-
-            _isVsComputerMode = isVsComputer;
-            _isNetworkGame = isNetworkGame; // Rögzítjük, hogy hálózati módban vagyunk-e
-
+            _networkService = networkService; // Lehet null, de a hívó (MainViewModel) gondoskodik róla, hogy itt ne legyen az.
+            _isVsComputerMode = isVsComputer; // Ez itt mindig false lesz hálózati módban
+            _isNetworkGame = isNetworkGame; // Ez itt mindig true lesz
             Enabled = true;
         }
 
-        // ÚJ KONSTRUKTOR: EZT FOGJA HÍVNI AZ AUTOFAC A HELYI/AI JÁTÉKHOZ
-        // (Ahol csak a két bool paraméter érkezik)
+        /// <summary>
+        /// Konstruktor HELYI/AI indításhoz. A DI konténer ezt választja, ha csak ezek a paraméterek érkeznek.
+        /// </summary>
         public GameSizeViewModel(IViewService viewService, bool isVsComputer, bool isNetworkGame = false)
         {
-            _viewService = viewService;
+            _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
             _isVsComputerMode = isVsComputer;
-            _isNetworkGame = isNetworkGame; // Ez most false
-            _networkService = null; // Biztos, ami biztos: null-ra állítjuk
+            _isNetworkGame = isNetworkGame; // Ez itt mindig false lesz
+            _networkService = null; // Nincs hálózati szolgáltatás helyi módban
             Enabled = true;
         }
 
-        // ... (Enabled property változatlan) ...
+        /// <summary>
+        /// Visszajelzés a felhasználónak a méretválasztás állapotáról vagy hibájáról.
+        /// </summary>
+        public string StatusMessage
+        {
+            get => _statusMessage;
+            // Fontos a 'private set', mert csak a ViewModel állíthatja be
+            private set => Set(ref _statusMessage, value);
+        }
+
         private bool _enabled;
+        /// <summary>
+        /// Engedélyezi/tiltja a méretválasztó gombokat.
+        /// </summary>
         public bool Enabled
         {
-            get { return _enabled; }
+            get => _enabled;
             set => Set(ref _enabled, value);
         }
 
-        // ... (SelectSize ICommand változatlan) ...
         private ICommand _selectSize;
-        public ICommand SelectSize
-        {
-            get
-            {
-                if (_selectSize == null)
-                    // Megj.: RelayCommand<string> helyett RelayCommand<int> hasznosabb lenne, 
-                    // de maradunk a stringnél a kódkonzisztencia miatt.
-                    _selectSize = new RelayCommand<string>(SelectSizeMethod);
-                return _selectSize;
-            }
-        }
+        /// <summary>
+        /// Parancs a táblaméret kiválasztásához és a játék indításához.
+        /// A CommandParameter tartalmazza a méretet stringként ("3", "4", "5").
+        /// </summary>
+        public ICommand SelectSize => _selectSize ?? (_selectSize = new RelayCommand<string>(SelectSizeMethod));
 
-        private async void SelectSizeMethod(string size) // A metódus most már ASZINKRON
+        /// <summary>
+        /// Végrehajtja a méret kiválasztását. Hálózati módban elküldi a méretet, majd navigál.
+        /// </summary>
+        // GameSizeViewModel.cs
+
+        private async void SelectSizeMethod(string size)
         {
             if (!Enabled) return;
 
             if (int.TryParse(size, out int boardSize) && boardSize > 0)
             {
-                Enabled = false; // Tiltás a navigáció előtt
+                Enabled = false;
+                StatusMessage = "Feldolgozás...";
 
-                // --- FONTOS LOGIKAI ELÁGAZÁS ---
-                if (_isNetworkGame && _networkService != null)
+                try
                 {
-                    // 1. ESET: HÁLÓZATI JÁTÉK (HOST KIVÁLASZT)
-                    // Küldjük el a méretet az ellenfélnek, majd navigálunk.
-                    // A SendBoardSizeAsync a NetworkService-ben kell, hogy meghívja a START üzenetet is!
-                    await _networkService.SendBoardSizeAsync(boardSize);
+                    var gameParams = new List<Parameter>
+            {
+                new NamedParameter("boardSizeParam", boardSize),
+                new NamedParameter("isVsComputerParam", _isVsComputerMode),
+                new NamedParameter("isNetworkGameParam", _isNetworkGame) // Ez a paraméter kritikus!
+            };
+
+                    if (_isNetworkGame && _networkService != null)
+                    {
+                        // HÁLÓZATI: Host küld méretet
+                        StatusMessage = "Méret küldése az ellenfélnek...";
+
+                        // HOZZÁADVA: A Host paramétert CSAK itt adjuk hozzá
+                        gameParams.Add(new NamedParameter("isHostParam", true));
+
+                        await _networkService.InitiateNetworkGameStartAsync(boardSize);
+                    }
+                    else
+                    {
+                        // HELYI/AI JÁTÉK
+                        // HOZZÁADVA: A Host paramétert itt is hozzá kell adni (false-ként)
+                        gameParams.Add(new NamedParameter("isHostParam", false));
+                    }
+
+                    // NAVIGÁCIÓ (MINDIG LEFUT)
+                    StatusMessage = "Játék indítása...";
+                    _viewService.OpenPage<GameViewModel>(gameParams.ToArray());
                 }
-
-                // 2. ESET: HELYI VAGY AI JÁTÉK (És navigálunk)
-                // Ez az ág most már minden esetben lefut, de hálózati módban a fent küldött méret is itt továbbítódik.
-
-                var sizeParam = new NamedParameter("boardSizeParam", boardSize);
-                var modeParam = new NamedParameter("isVsComputerParam", _isVsComputerMode);
-                var parameters = new Parameter[] { sizeParam, modeParam };
-
-                _viewService.OpenPage<GameViewModel>(parameters);
-                // A GameSizePage automatikusan visszaállítja az Enabled=true állapotot, ha visszanavigálunk.
+                catch (Exception ex)
+                {
+                    StatusMessage = $"HIBA: {ex.Message}";
+                    System.Diagnostics.Debug.WriteLine($"Hiba a méret kiválasztása/küldése során: {ex.Message}");
+                    Enabled = true;
+                }
+            }
+            else
+            {
+                StatusMessage = "Hiba: Érvénytelen méret.";
+                System.Diagnostics.Debug.WriteLine($"Érvénytelen méret paraméter: {size}");
+                Enabled = true;
             }
         }
     }

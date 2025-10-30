@@ -33,9 +33,8 @@ namespace Amoba.ViewModel
         // --- HÁLÓZATI MEZŐK ---
         private readonly INetworkService _networkService;
         private bool _isNetworkGame = false;
-        private bool _amIHost = false;
+        private bool _amIHost = false; // TRUE ha X (Host), FALSE ha O (Kliens)
         private string _opponentName = string.Empty;
-
 
         // --- PUBLIKUS PROPERTY-K ---
         public int BoardSize { get => boardSize; set => Set(ref boardSize, value); }
@@ -50,16 +49,11 @@ namespace Amoba.ViewModel
             {
                 if (Set(ref isPlayer2Turn, value))
                 {
-                    // ELLENŐRIZZÜK, HOGY P2 JÖN-E, ÉS GÉP ELLEN JÁTSZUNK-E
-                    if (isVsComputer && value)
+                    // AI LÉPÉS: Csak ha P2 jön ÉS Gép ellen játszunk
+                    isComputerTurn = isVsComputer && value;
+                    if (isComputerTurn && !isProcessingAiMove)
                     {
-                        // **KRITIKUS HIBA JAVÍTÁSA:** Beállítjuk a gépi kör állapotot
-                        isComputerTurn = true;
                         TriggerAiMove();
-                    }
-                    else
-                    {
-                        isComputerTurn = false;
                     }
                 }
             }
@@ -77,17 +71,17 @@ namespace Amoba.ViewModel
         {
             get => setImage ?? (setImage = new RelayCommand<Place>(
                 SetImageMethod,
+                // Javított CanExecute:
                 p => p != null && p.IsEmpty &&
-                     !isProcessingAiMove &&
-
-                     // ENGEDÉLYEZÉS, ha a soron lévő játékos ember és saját maga:
+                     !isProcessingAiMove && // AI nem gondolkodik
                      (
-                        // ESET 1: HÁLÓZATI JÁTÉK
-                        (IsNetworkGame && ((AmIHost && IsPlayer1Turn) || (!AmIHost && IsPlayer2Turn))) ||
-
-                        // ESET 2: HELYI JÁTÉK (AI ellen VAGY PVP)
+                        // ESET 1: HELYI/AI JÁTÉK
                         // Engedélyezzük, ha P1 jön (mindig ember) VAGY P2 jön, de nem gép
-                        (!IsNetworkGame && (IsPlayer1Turn || (IsPlayer2Turn && !isVsComputer)))
+                        (!IsNetworkGame && (IsPlayer1Turn || (IsPlayer2Turn && !isVsComputer))) ||
+
+                        // ESET 2: HÁLÓZATI JÁTÉK
+                        // Engedélyezzük, ha hálózatban vagyunk ÉS a mi körünk van
+                        (IsNetworkGame && ((AmIHost && IsPlayer1Turn) || (!AmIHost && IsPlayer2Turn)))
                      )
             ));
         }
@@ -98,21 +92,35 @@ namespace Amoba.ViewModel
         // --- KONSTRUKTOR ÉS INITIALIZÁLÁS ---
         // ===================================================================
 
-        public GameViewModel(int boardSizeParam, bool isVsComputerParam, INetworkService networkService)
+        // JAVÍTOTT KONSTRUKTOR: Ez fogadja a DI paramétereket (4 paraméter)
+        public GameViewModel(int boardSizeParam, bool isVsComputerParam, bool isNetworkGameParam, bool isHostParam, INetworkService networkService)
         {
             _networkService = networkService;
 
-            if (_networkService != null)
+            // 1. ÁLLAPOTOK BEÁLLÍTÁSA A PARAMÉTEREKBŐL
+            _isNetworkGame = isNetworkGameParam;
+            _amIHost = isHostParam; // Helyes szerepkör beállítása
+
+            // 2. FELIRATKOZÁS (Csak ha hálózati játék)
+            if (_isNetworkGame)
             {
-                // Feliratkozás a hálózati eseményekre
+                // A GameStarted esemény fogja beállítani az ellenfél nevét és a köröket
                 _networkService.GameStarted += NetworkService_GameStarted;
                 _networkService.MoveReceived += NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
             }
 
+            // 3. TÁBLA INICIALIZÁLÁSA
             InitializeViewModel(boardSizeParam, isVsComputerParam);
+
+            // 4. KÖR BEÁLLÍTÁSA (Alapértelmezett)
+            // Helyi/AI módban P1 kezd.
+            // Hálózati módban a GameStarted esemény ezt felülírja.
+            IsPlayer1Turn = true;
+            IsPlayer2Turn = false;
         }
 
+        // FONTOS: Az InitializeViewModel NEM állítja be az IsNetworkGame-et!
         private void InitializeViewModel(int boardSizeParam, bool isVsComputerMode)
         {
             BoardSize = boardSizeParam;
@@ -127,21 +135,14 @@ namespace Amoba.ViewModel
             }
             Player1Score = 0;
             Player2Score = 0;
-            IsPlayer1Turn = true;
-            IsPlayer2Turn = false;
+            // A köröket a konstruktor vagy a GameStarted esemény állítja be!
             isComputerTurn = false;
             IsGameOver = false;
-            IsNetworkGame = false; // Alapértelmezés: Nem hálózati
 
-            // OpponentName beállítása
-            if (isVsComputerMode)
-            {
-                OpponentName = "A GÉP";
-            }
-            else
-            {
-                OpponentName = "JÁTÉKOS (O)";
-            }
+            // Az OpponentName beállítása (Helyi/AI mód)
+            if (isVsComputerMode) { OpponentName = "A GÉP"; }
+            else if (!_isNetworkGame) { OpponentName = "JÁTÉKOS (O)"; }
+            // Ha hálózati, az OpponentName-et a GameStarted esemény fogja beállítani
         }
 
         // ===================================================================
@@ -155,42 +156,74 @@ namespace Amoba.ViewModel
             ResetBoard();
         }
 
-        private void SetImageMethod(Place place)
+        private async void SetImageMethod(Place place)
         {
-            if (place == null || !place.IsEmpty) return;
+            try
+            {
+                if (place == null || !place.IsEmpty) return;
 
-            IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
-            ExecuteMove(place, iconToUse);
+                IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
+
+                await ExecuteMove(place, iconToUse);
+            }
+            catch (Exception ex)
+            {
+                // Elkapjuk az ObjectDisposedException-t, ami a játék végén normális
+                Debug.WriteLine($"Hiba a SetImageMethod-ban (valószínűleg a játék vége): {ex.Message}");
+            }
         }
 
-        private void ExecuteMove(Place place, IconType type)
+        /// <summary>
+        /// A játéklogika központi metódusa. Végrehajt egy lépést, elküldi a hálózaton (ha kell),
+        /// ellenőrzi a győztest, és átadja a kört.
+        /// </summary>
+        /// <param name="place">A mező, ahova léptek.</param>
+        /// <param name="type">A lépő játékos típusa (X vagy O).</param>
+        /// <returns>Egy Task, mivel a hálózati küldés aszinkron.</returns>
+        private async Task ExecuteMove(Place place, IconType type)
         {
+            // Alapvető ellenőrzés
             if (place == null || !place.IsEmpty) return;
 
+            // 1. LÉPÉS: A LOKÁLIS TÁBLA FRISSÍTÉSE
             place.Type = type;
-            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged(); // Gombok állapotának frissítése
 
-            // HÁLÓZATI LÉPÉS KÜLDÉSE:
+            // 2. LÉPÉS: HÁLÓZATI KÜLDÉS
+            // Csak akkor küldünk, ha hálózati játékban vagyunk ÉS a lépés tőlünk származik
             if (IsNetworkGame && (type == IconType.Cross && AmIHost || type == IconType.Circle && !AmIHost))
             {
-                Task.Run(async () => await _networkService.SendMoveAsync(place.Id));
+                try
+                {
+                    // Megvárjuk, amíg a lépés elküldése befejeződik (vagy hibát dob)
+                    await _networkService.SendMoveAsync(place.Id);
+                }
+                catch (Exception ex)
+                {
+                    // A hívó metódus (SetImageMethod) elkapja ezt a hibát.
+                    // Ez a hiba várható, ha a másik fél bontotta a kapcsolatot.
+                    Debug.WriteLine($"SendMoveAsync hiba (a hívó elkapja): {ex.Message}");
+                }
             }
 
-            // GYŐZELEM ELLENŐRZÉSE
+            // 3. LÉPÉS: GYŐZELEM ELLENŐRZÉSE
+            // Ezt csak a hálózati küldés *után* tesszük meg, hogy elkerüljük az ObjectDisposedException-t
             var winner = GameLogic.CheckWinner(Places, BoardSize);
             var isBoardFull = Places.All(p => !p.IsEmpty);
 
             if (winner != IconType.None || isBoardFull)
             {
+                // Játék vége: Üzenet beállítása és Reset indítása
                 if (winner == IconType.Cross) { GameOverMessage = "Játékos (X) Nyert!"; Player1Score++; }
                 else if (winner == IconType.Circle) { GameOverMessage = isVsComputer ? "A Gép Nyert!" : "Játékos (O) Nyert!"; Player2Score++; }
                 else { GameOverMessage = "Döntetlen!"; }
 
                 IsGameOver = true;
-                ResetBoard();
+                ResetBoard(); // Ez 'async void', elindítja a leállítást (és a Disconnect-et)
             }
             else
             {
+                // Nincs győztes, átadjuk a kört
                 ChangeTurn();
             }
         }
@@ -210,7 +243,7 @@ namespace Amoba.ViewModel
 
                 if (bestMovePlace != null && bestMovePlace.IsEmpty)
                 {
-                    ExecuteMove(bestMovePlace, IconType.Circle);
+                    await ExecuteMove(bestMovePlace, IconType.Circle);
                 }
                 else
                 {
@@ -232,10 +265,10 @@ namespace Amoba.ViewModel
         private void ChangeTurn()
         {
             IsPlayer1Turn = !IsPlayer1Turn;
-            IsPlayer2Turn = !IsPlayer1Turn;
+            IsPlayer2Turn = !IsPlayer2Turn;
 
-            // Ha P2Turn van és gép ellen játszunk, akkor isComputerTurn lesz igaz,
-            // és ez automatikusan elindítja az AI-t a frissített IsPlayer2Turn property-ben.
+            // FONTOS: A CanExecute frissítésének kényszerítése
+            (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
         }
 
         // ===================================================================
@@ -246,31 +279,42 @@ namespace Amoba.ViewModel
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                IsNetworkGame = true;
-                AmIHost = e.IsHost;
-                OpponentName = e.OpponentName; // Hálózati ellenfél neve
+                // 1. Állapot frissítése (IsNetworkGame már true)
+                AmIHost = e.IsHost; // Megerősíti a szerepkört
+                OpponentName = e.OpponentName; // Beállítja a nevet
 
-                BoardSize = e.BoardSize;
-                // Inicializálás hálózati módban (isVsComputer=false)
-                InitializeViewModel(e.BoardSize, false);
+                // 2. KÖR BEÁLLÍTÁSA: A HOST KEZD!
+                IsPlayer1Turn = e.IsHost; // Ha én vagyok a Host (X), én kezdek.
+                IsPlayer2Turn = !e.IsHost; // Ha én vagyok a Kliens (O), az ellenfél (X) jön.
 
-                IsPlayer1Turn = AmIHost; // Host (X) kezd
-                IsPlayer2Turn = !AmIHost;
+                // 3. CANEXECUTE FRISSÍTÉSE (Ez a kulcs!)
+                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
             });
         }
 
-        private void NetworkService_MoveReceived(object sender, int moveIndex)
+        private async void NetworkService_MoveReceived(object sender, int moveIndex)
         {
-            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            try
             {
-                IconType opponentIcon = AmIHost ? IconType.Circle : IconType.Cross;
-                var targetPlace = Places.FirstOrDefault(p => p.Id == moveIndex);
-
-                if (targetPlace != null && targetPlace.IsEmpty)
+                await DispatcherHelper.RunAsync(async () =>
                 {
-                    ExecuteMove(targetPlace, opponentIcon);
-                }
-            });
+                    IconType opponentIcon = AmIHost ? IconType.Circle : IconType.Cross;
+                    var targetPlace = Places.FirstOrDefault(p => p.Id == moveIndex);
+
+                    if (targetPlace != null && targetPlace.IsEmpty)
+                    {
+                        await ExecuteMove(targetPlace, opponentIcon);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Hiba a NetworkService_MoveReceived-ben: {ex.Message}");
+                // Ha a másik fél lépése közben omlik össze, itt is leállítjuk
+                IsGameOver = true;
+                GameOverMessage = "Hálózati hiba történt. A játék megszakadt.";
+                ResetBoard();
+            }
         }
 
         private void NetworkService_OpponentDisconnected(object sender, EventArgs e)
@@ -284,36 +328,46 @@ namespace Amoba.ViewModel
 
         private async void ResetBoard()
         {
-            await Task.Delay(1500);
-
-            if (IsNetworkGame)
+            try
             {
-                _networkService.Disconnect();
+                await Task.Delay(1500);
+
+                if (IsNetworkGame)
+                {
+                    _networkService.Disconnect();
+                }
+
+                DispatcherHelper.CheckBeginInvokeOnUI(() =>
+                {
+                    // ... (A tábla törlésének logikája változatlan)
+                    foreach (var place in Places) { place.Type = IconType.None; }
+                    IsPlayer1Turn = true;
+                    IsPlayer2Turn = false;
+                    isComputerTurn = false;
+                    isProcessingAiMove = false;
+                    IsNetworkGame = false;
+                    isVsComputer = false;
+                    OpponentName = "JÁTÉKOS (O)";
+                    IsGameOver = false;
+                    (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+                });
             }
-
-            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            catch (Exception ex)
             {
-                foreach (var place in Places) { place.Type = IconType.None; }
-
-                // Visszaállítás alapértelmezett, nem hálózati állapotra
-                IsPlayer1Turn = true;
-                IsPlayer2Turn = false;
-                isComputerTurn = false;
-                isProcessingAiMove = false;
-                IsNetworkGame = false;
-
-                IsGameOver = false;
-                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
-            });
+                Debug.WriteLine($"FATALIS Hiba a ResetBoard-ban: {ex.Message}");
+            }
         }
 
         public override void Cleanup()
         {
-            _networkService.GameStarted -= NetworkService_GameStarted;
-            _networkService.MoveReceived -= NetworkService_MoveReceived;
-            _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
+            if (_networkService != null)
+            {
+                _networkService.GameStarted -= NetworkService_GameStarted;
+                _networkService.MoveReceived -= NetworkService_MoveReceived;
+                _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
 
-            _networkService.Disconnect();
+                _networkService.Disconnect();
+            }
 
             base.Cleanup();
         }

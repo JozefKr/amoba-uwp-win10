@@ -37,25 +37,22 @@ namespace Amoba
             // ===================================================================
             // 2. VIEWMODEL-EK REGISZTRÁLÁSA
             // ===================================================================
-            // Ez a rész automatikusan regisztrálja az összes ViewModelBase-ből
-            // származó típust (MainViewModel, GameViewModel stb.)
             var currentAssembly = typeof(Bootstrapper).GetTypeInfo().Assembly;
+            // 1. Regisztrálja az összes "egyszerű" ViewModel-t, 
+            //    aminek NINCS szüksége futásidejű paraméterre (pl. MainViewModel).
             builder.RegisterTypes(currentAssembly.GetTypes()
-                   .Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase))
-                   .ToArray());
+                   .Where(z => z.GetTypeInfo().BaseType == typeof(ViewModelBase) &&
+                               z.Name != "GameViewModel" && // KIVÉTEL: GameViewModel
+                               z.Name != "GameSizeViewModel" // KIVÉTEL: GameSizeViewModel
+                   ).ToArray());
 
-            // --- FONTOS MEGEGYEZÉS ---
-            // A GameSizeViewModel és GameViewModel konstruktorai paramétereket várnak
-            // (bool isVsComputer, int boardSizeParam). Az Autofac alapértelmezett
-            // regisztrációja ezeket nem tudja kezelni.
-            // A te ViewService.OpenPage<TViewModel>(params Parameter[] parameters)
-            // metódusod valószínűleg kezeli ezt a paraméterátadást futásidőben,
-            // ami egy valid megoldás. De ha problémád lenne a paraméteres
-            // konstruktorok aktiválásával, akkor itt lehetne őket expliciten
-            // regisztrálni delegátummal vagy lambda kifejezéssel.
-            // Egyelőre hagyjuk így, mert a hibád alapján csak az INetworkService hiányzott.
+            // 2. Regisztrálja a "komplex" ViewModel-eket (amelyek paramétereket várnak).
+            //    Az .AsSelf() megmondja az Autofac-nak, hogy "ez az osztály létezik",
+            //    de ne próbálja meg felépíteni, amíg a ViewService nem kéri
+            //    a futásidejű paraméterekkel.
+            builder.RegisterType<GameViewModel>().AsSelf();
+            builder.RegisterType<GameSizeViewModel>().AsSelf();
             // -------------------------
-
 
             var container = builder.Build();
 
