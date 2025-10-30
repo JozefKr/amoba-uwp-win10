@@ -131,16 +131,15 @@
             </ItemsControl>
         </Viewbox>
         <Grid Background="#BF000000" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-          Visibility="{Binding IsGameOver, Converter={StaticResource BooleanToVisibilityConverter}}">
-
+      Visibility="{Binding IsGameOver, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-
                 <TextBlock Text="{Binding GameOverMessage}"
-                       Style="{ThemeResource HeaderTextBlockStyle}"
-                       FontSize="48"
-                       Foreground="White"
-                       HorizontalAlignment="Center"
-                       TextWrapping="Wrap"/>
+                   Style="{ThemeResource HeaderTextBlockStyle}"
+                   FontSize="48"
+                   Foreground="White"
+                   HorizontalAlignment="Center"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"/>
             </StackPanel>
         </Grid>
     </Grid>
