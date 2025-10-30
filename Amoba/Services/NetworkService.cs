@@ -33,6 +33,9 @@ namespace Amoba.Services
         private Timer _broadcastTimer;
         private CancellationTokenSource _readCts;
 
+        private DataReader _socketReader;
+        private DataWriter _socketWriter;
+
         // --- Konstruktor ---
         public NetworkService()
         {
@@ -102,46 +105,35 @@ namespace Amoba.Services
             }
         }
 
+        // ===================================================================
+        // JÁTÉK INDÍTÁSA A HOST OLDALÁRÓL (EZT HÍVJA A GAMESIZEVIEWMODEL)
+        // ===================================================================
         public async Task InitiateNetworkGameStartAsync(int boardSize)
         {
             if (_gameSocket == null)
             {
                 Debug.WriteLine("Hiba: Játék indítása hívva, de nincs aktív TCP kapcsolat.");
-
                 NetworkErrorOccurred?.Invoke(this, "Hiba: Nincs kapcsolat az ellenféllel.");
-
                 return;
             }
 
             try
             {
                 // 1. ÜZENET KÜLDÉSE A KLIENSNEK: START;HostNeve;Méret
-
-                string hostName = GetLocalIpAddress() ?? "Host"; // Vagy egy beállított név
-
+                // (A kód, ami korábban az '_INTERNAL' metódusban volt, most itt van)
+                string hostName = GetLocalIpAddress() ?? "Host";
                 string message = $"START;{hostName};{boardSize}";
-
                 await SendMessageAsync(message);
-
                 Debug.WriteLine($"[HOST SEND] Start üzenet küldve: {message}");
 
                 // 2. LOKÁLIS ESEMÉNY KIVÁLTÁSA A HOST GAMEVIEWMODEL SZÁMÁRA
-
-                // A Host is feliratkozik erre, és elindítja a saját játékát.
-
-                // Az ellenfél nevét itt még nem tudjuk biztosan, használhatunk placeholdert.
-
-                string opponentName =
-                    _gameSocket.Information.RemoteHostName.DisplayName ?? "Kliens";
-
+                string opponentName = _gameSocket.Information.RemoteHostName.DisplayName ?? "Kliens";
                 GameStarted?.Invoke(this, new GameStartedEventArgs(opponentName, boardSize, true)); // Host = true
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Hiba a játék indításakor: {ex.Message}");
-
                 NetworkErrorOccurred?.Invoke(this, $"Hiba a játék indításakor: {ex.Message}");
-
                 Disconnect();
             }
         }
@@ -366,11 +358,9 @@ namespace Amoba.Services
             }
         }
 
-        private void TcpListener_ConnectionReceived(
-            StreamSocketListener sender,
-            StreamSocketListenerConnectionReceivedEventArgs args
-        )
+        private void TcpListener_ConnectionReceived(StreamSocketListener sender, StreamSocketListenerConnectionReceivedEventArgs args)
         {
+            // 1. Csak egy kapcsolatot fogadunk el
             if (_gameSocket != null)
             {
                 args.Socket.Dispose();
@@ -378,17 +368,22 @@ namespace Amoba.Services
             }
 
             _gameSocket = args.Socket;
-
             Debug.WriteLine($"Kapcsolat elfogadva: {_gameSocket.Information.RemoteHostName}");
 
-            _tcpListener.Dispose(); // Leállítjuk a további figyelést
-
+            // 2. Leállítjuk a további figyelést (már van ellenfél)
+            _tcpListener?.Dispose();
             _tcpListener = null;
 
-            StartReading(_gameSocket); // Elindítjuk a figyelést az ellenfél lépéseire
+            // 3. Létrehozzuk az olvasót és írót (ahogy a legutóbbi javításban)
+            _socketReader = new DataReader(_gameSocket.InputStream);
+            _socketReader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
+            _socketWriter = new DataWriter(_gameSocket.OutputStream);
 
-            // JELZÉS A HOST MAINVIEWMODEL-NEK: Navigálhat a GameSizePage-re
+            // 4. Elindítjuk a háttérben az üzenetek figyelését
+            StartReading();
 
+            // 5. JELZÜNK A MAINVIEWMODEL-NEK (A LÉNYEG)
+            // Nem küldünk "START"-ot, csak jelzünk a Host UI-nak, hogy navigálhat.
             HostConnectionEstablished?.Invoke(this, EventArgs.Empty);
         }
 
@@ -407,15 +402,20 @@ namespace Amoba.Services
                 _gameSocket = new StreamSocket();
                 await _gameSocket.ConnectAsync(remoteHost, TcpGamePort);
                 Debug.WriteLine("Kapcsolódás sikeres! Várakozás a Host START üzenetére...");
-                StartReading(_gameSocket);
-                // A Kliens itt vár a HandleReceivedMessage-re, ami kiváltja a GameStarted eseményt
+
+                // --- JAVÍTÁS: Olvasó és Író Létrehozása ---
+                _socketReader = new DataReader(_gameSocket.InputStream);
+                _socketReader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
+                _socketWriter = new DataWriter(_gameSocket.OutputStream);
+                // ---
+
+                StartReading(); // Már nem kell átadni a socketet
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Hiba a kapcsolódáskor: {ex.Message}");
                 NetworkErrorOccurred?.Invoke(this, $"Hiba a kapcsolódáskor: {ex.Message}");
                 Disconnect();
-                // Itt nem kell visszatérési érték, az eseménykezelő kezeli a hibát
             }
         }
 
@@ -425,72 +425,41 @@ namespace Amoba.Services
 
         // ===================================================================
 
-        private async void StartReading(StreamSocket socket)
+        private async void StartReading()
         {
             _readCts = new CancellationTokenSource();
             try
             {
-                using (var reader = new DataReader(socket.InputStream))
+                // JAVÍTÁS: A 'using' blokk eltávolítva!
+                // var reader = _socketReader; // Csak egy referencia
+
+                while (!_readCts.IsCancellationRequested)
                 {
-                    reader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
+                    uint size = await _socketReader.LoadAsync(sizeof(uint)).AsTask(_readCts.Token);
+                    if (size == 0) throw new Exception("Kapcsolat lezárva (0 bájt olvasva).");
 
-                    while (!_readCts.IsCancellationRequested)
+                    uint messageLength = _socketReader.ReadUInt32();
+                    uint actualMessageSize = await _socketReader.LoadAsync(messageLength).AsTask(_readCts.Token);
+
+                    if (actualMessageSize == 0 && messageLength > 0) throw new Exception("Kapcsolat lezárva (üzenet olvasása közben).");
+
+                    if (actualMessageSize == messageLength)
                     {
-                        // 1. Olvassuk be a következő üzenet hosszát (4 bájt)
-
-                        uint size = await reader.LoadAsync(sizeof(uint)).AsTask(_readCts.Token);
-
-                        if (size == 0)
-                        {
-                            throw new Exception(
-                                "A kapcsolatot az ellenfél lezárta (0 bájt olvasva)."
-                            );
-                        }
-
-                        uint messageLength = reader.ReadUInt32();
-
-                        uint actualMessageSize = await reader
-                            .LoadAsync(messageLength)
-                            .AsTask(_readCts.Token);
-
-                        if (actualMessageSize == 0 && messageLength > 0)
-                        {
-                            throw new Exception(
-                                "A kapcsolatot az ellenfél lezárta (üzenet olvasása közben)."
-                            );
-                        }
-
-                        if (actualMessageSize == messageLength)
-                        {
-                            string message = reader.ReadString(actualMessageSize);
-
-                            HandleReceivedMessage(message); // Feldolgozás
-                        }
+                        string message = _socketReader.ReadString(actualMessageSize);
+                        HandleReceivedMessage(message);
                     }
                 }
             }
             catch (TaskCanceledException)
             {
-                // VÁRT VISELKEDÉS: Amikor a Disconnect() leállítja a feladatot.
-
-                Debug.WriteLine(
-                    "StartReading: Az olvasási feladat szándékosan leállítva (Cancel)."
-                );
+                Debug.WriteLine("StartReading: Feladat szándékosan leállítva.");
             }
             catch (Exception ex) when (_readCts != null && !_readCts.IsCancellationRequested)
             {
-                // VÁRATLAN HIBA: A kapcsolat megszakadt
-
                 Debug.WriteLine($"Olvasási hiba: {ex.Message}");
-
                 OpponentDisconnected?.Invoke(this, EventArgs.Empty);
-
-                Disconnect(); // Csak váratlan hiba esetén zárjuk le itt
+                Disconnect();
             }
-            // nem zárja le a kapcsolatot. A kapcsolat nyitva marad, amíg a 'Disconnect()'
-
-            // metódust (pl. a ResetBoard-ból) meg nem hívjuk.
-
         }
 
         private void HandleReceivedMessage(string message)
@@ -555,29 +524,23 @@ namespace Amoba.Services
 
         private async Task SendMessageAsync(string message)
         {
-            if (_gameSocket == null)
+            if (_socketWriter == null) //A writert ellenőrizzük
             {
-                // Ha a socket már lezárult (pl. ResetBoard hívta),
-                // egyszerűen ne csináljunk semmit.
-                Debug.WriteLine("SendMessageAsync: Socket már le van zárva, küldés kihagyva.");
+                Debug.WriteLine("SendMessageAsync: Socket Writer nincs inicializálva, küldés kihagyva.");
                 return;
             }
 
             try
             {
-                using (var writer = new DataWriter(_gameSocket.OutputStream))
-                {
-                    writer.WriteUInt32(writer.MeasureString(message));
-                    writer.WriteString(message);
-                    await writer.StoreAsync();
-                    await writer.FlushAsync();
-                }
+                _socketWriter.WriteUInt32(_socketWriter.MeasureString(message));
+                _socketWriter.WriteString(message);
+                await _socketWriter.StoreAsync();
+                await _socketWriter.FlushAsync();
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Hiba az üzenet küldésekor: {ex.Message}");
-                // Dobjuk tovább a kivételt, hogy a GameViewModel (a "főnök")
-                // el tudja kapni és kezelni.
+                // JAVÍTÁS: Továbbdobjuk a hibát a ViewModel felé
                 throw new Exception("Hiba az üzenet küldésekor", ex);
             }
         }
@@ -590,10 +553,16 @@ namespace Amoba.Services
 
         public void Disconnect()
         {
-            _readCts?.Cancel();
+            _readCts?.Cancel(); // Leállítja a StartReading ciklust
+
+            // Takarítsuk az új mezőket
+            _socketReader?.Dispose();
+            _socketReader = null;
+
+            _socketWriter?.Dispose();
+            _socketWriter = null;
 
             _tcpListener?.Dispose();
-
             _tcpListener = null;
 
             if (_gameSocket != null)
@@ -607,11 +576,8 @@ namespace Amoba.Services
         public void Dispose()
         {
             StopHosting();
-
             StopDiscovering();
-
             Disconnect();
-
             GC.SuppressFinalize(this);
         }
 
