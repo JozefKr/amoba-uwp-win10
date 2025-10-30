@@ -84,7 +84,7 @@ namespace Amoba.ViewModel
                      )
             ));
         }
-        public ICommand NewGameCommand => newGameCommand ?? (newGameCommand = new RelayCommand(ExecuteNewGame));
+        public ICommand NewGameCommand => newGameCommand ?? (newGameCommand = new RelayCommand(ExecuteNewGameAsync));
 
 
         // ===================================================================
@@ -107,6 +107,7 @@ namespace Amoba.ViewModel
                 _networkService.GameStarted += NetworkService_GameStarted;
                 _networkService.MoveReceived += NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
+                _networkService.RematchReceived += NetworkService_RematchReceived;
             }
 
             // 3. TÁBLA INICIALIZÁLÁSA
@@ -148,10 +149,29 @@ namespace Amoba.ViewModel
         // --- FŐ LOGIKAI METÓDUSOK ---
         // ===================================================================
 
-        private void ExecuteNewGame()
+        private async void ExecuteNewGameAsync()
         {
             Player1Score = 0;
             Player2Score = 0;
+
+            // Ha hálózati játékban vagyunk, küldjük el a kérést
+            if (IsNetworkGame && _networkService != null)
+            {
+                try
+                {
+                    // Elküldjük a kérést az ellenfélnek
+                    await _networkService.SendRematchRequestAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Ha a küldés sikertelen (pl. ellenfél már kilépett),
+                    // akkor is kezeljük le a játék végét.
+                    Debug.WriteLine($"Hiba a 'Rematch' küldésekor: {ex.Message}");
+                    HandleDisconnection("Az ellenfél már kilépett.");
+                    return; // Ne futtassuk le a ResetBoard-ot, mert a HandleDisconnection megtette
+                }
+            }
+
             ResetBoard();
         }
 
@@ -348,6 +368,21 @@ namespace Amoba.ViewModel
             });
         }
 
+        /// <summary>
+        /// Akkor fut le, ha az ellenfél nyomta meg az "Új Játék" gombot.
+        /// </summary>
+        private void NetworkService_RematchReceived(object sender, EventArgs e)
+        {
+            // Az ellenfél kérésére mi is újraindítjuk a táblát.
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                Debug.WriteLine("Visszavágó kérés fogadva, tábla törlése...");
+                Player1Score = 0; // Töröljük a pontszámot is
+                Player2Score = 0;
+                ResetBoard();
+            });
+        }
+
         private async void ResetBoard()
         {
             try
@@ -389,6 +424,7 @@ namespace Amoba.ViewModel
                 _networkService.GameStarted -= NetworkService_GameStarted;
                 _networkService.MoveReceived -= NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
+                _networkService.RematchReceived -= NetworkService_RematchReceived;
 
                 _networkService.Disconnect();
             }

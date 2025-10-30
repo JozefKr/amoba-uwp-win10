@@ -21,6 +21,7 @@ namespace Amoba.Services
         public event EventHandler OpponentDisconnected;
         public event EventHandler<string> NetworkErrorOccurred;
         public event EventHandler HostConnectionEstablished;
+        public event EventHandler RematchReceived;
 
         // --- Konstansok ---
         private const string MulticastGroupAddress = "239.255.42.99";
@@ -99,7 +100,7 @@ namespace Amoba.Services
         }
 
         // ===================================================================
-        // UDP KERESÉS (Változatlan)
+        // UDP KERESÉS
         // ===================================================================
         public async Task StartDiscoveringAsync()
         {
@@ -266,7 +267,6 @@ namespace Amoba.Services
                 OpponentDisconnected?.Invoke(this, EventArgs.Empty);
                 Disconnect();
             }
-            // A 'finally' blokk (és a 'Disconnect()') szándékosan el lett távolítva
         }
 
         private void HandleReceivedMessage(string message)
@@ -287,6 +287,16 @@ namespace Amoba.Services
                     MoveReceived?.Invoke(this, moveIndex);
                 }
             }
+            else if (message.StartsWith("REMATCH;"))
+            {
+                // Az ellenfél visszavágót kért.
+                RematchReceived?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public async Task SendRematchRequestAsync()
+        {
+            await SendMessageAsync("REMATCH;");
         }
 
         public async Task InitiateNetworkGameStartAsync(int boardSize)

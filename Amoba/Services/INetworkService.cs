@@ -17,6 +17,11 @@ namespace Amoba.Services
         event EventHandler<int> MoveReceived; // Lépés érkezett
 
         /// <summary>
+        /// Akkor aktiválódik, ha az ellenfél visszavágót kért (megnyomta az Új Játék gombot).
+        /// </summary>
+        event EventHandler RematchReceived;
+
+        /// <summary>
         /// Aktiválódik a HOST oldalon, amikor a Kliens sikeresen csatlakozott TCP-n.
         /// Jelzi a Host MainViewModel-nek, hogy navigálhat a GameSizePage-re.
         /// </summary>
@@ -54,6 +59,11 @@ namespace Amoba.Services
         /// Elküldi a helyi játékos lépését (a mező indexét) az ellenfélnek TCP-n.
         /// </summary>
         Task SendMoveAsync(int index);
+
+        /// <summary>
+        /// Elküldi az "Új Játék" (visszavágó) kérést az ellenfélnek.
+        /// </summary>
+        Task SendRematchRequestAsync();
 
         /// <summary>
         /// Lezár minden aktív UDP és TCP kapcsolatot/listenert.
