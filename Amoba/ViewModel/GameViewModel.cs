@@ -71,7 +71,6 @@ namespace Amoba.ViewModel
         {
             get => setImage ?? (setImage = new RelayCommand<Place>(
                 SetImageMethod,
-                // Javított CanExecute:
                 p => p != null && p.IsEmpty &&
                      !isProcessingAiMove && // AI nem gondolkodik
                      (
@@ -165,11 +164,20 @@ namespace Amoba.ViewModel
                 IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
 
                 await ExecuteMove(place, iconToUse);
+
+                // A körváltást a HÍVÓ metódus végzi el,
+                // miután a lépés (és a küldés) befejeződött.
+                // (De csak ha nincs még vége a játéknak)
+                if (!IsGameOver)
+                {
+                    ChangeTurn();
+                }
             }
             catch (Exception ex)
             {
-                // Elkapjuk az ObjectDisposedException-t, ami a játék végén normális
-                Debug.WriteLine($"Hiba a SetImageMethod-ban (valószínűleg a játék vége): {ex.Message}");
+                Debug.WriteLine($"Hiba a SetImageMethod-ban: {ex.Message}");
+                // Ha hiba történik (pl. socket lezárva), állítsuk le a játékot
+                HandleDisconnection("Hálózati hiba (küldés).");
             }
         }
 
@@ -203,6 +211,7 @@ namespace Amoba.ViewModel
                     // A hívó metódus (SetImageMethod) elkapja ezt a hibát.
                     // Ez a hiba várható, ha a másik fél bontotta a kapcsolatot.
                     Debug.WriteLine($"SendMoveAsync hiba (a hívó elkapja): {ex.Message}");
+                    throw;
                 }
             }
 
@@ -220,11 +229,6 @@ namespace Amoba.ViewModel
 
                 IsGameOver = true;
                 ResetBoard(); // Ez 'async void', elindítja a leállítást (és a Disconnect-et)
-            }
-            else
-            {
-                // Nincs győztes, átadjuk a kört
-                ChangeTurn();
             }
         }
 
@@ -244,6 +248,11 @@ namespace Amoba.ViewModel
                 if (bestMovePlace != null && bestMovePlace.IsEmpty)
                 {
                     await ExecuteMove(bestMovePlace, IconType.Circle);
+                    // A körváltást a HÍVÓ metódus végzi el.
+                    if (!IsGameOver)
+                    {
+                        ChangeTurn();
+                    }
                 }
                 else
                 {
@@ -287,7 +296,7 @@ namespace Amoba.ViewModel
                 IsPlayer1Turn = e.IsHost; // Ha én vagyok a Host (X), én kezdek.
                 IsPlayer2Turn = !e.IsHost; // Ha én vagyok a Kliens (O), az ellenfél (X) jön.
 
-                // 3. CANEXECUTE FRISSÍTÉSE (Ez a kulcs!)
+                // 3. CANEXECUTE FRISSÍTÉSE
                 (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
             });
         }
@@ -304,25 +313,38 @@ namespace Amoba.ViewModel
                     if (targetPlace != null && targetPlace.IsEmpty)
                     {
                         await ExecuteMove(targetPlace, opponentIcon);
+
+                        // A körváltást a HÍVÓ metódus végzi el.
+                        if (!IsGameOver)
+                        {
+                            ChangeTurn();
+                        }
                     }
                 });
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Hiba a NetworkService_MoveReceived-ben: {ex.Message}");
-                // Ha a másik fél lépése közben omlik össze, itt is leállítjuk
-                IsGameOver = true;
-                GameOverMessage = "Hálózati hiba történt. A játék megszakadt.";
-                ResetBoard();
+                HandleDisconnection("Hálózati hiba (fogadás).");
             }
         }
 
         private void NetworkService_OpponentDisconnected(object sender, EventArgs e)
         {
+            HandleDisconnection($"A játék megszakadt: {OpponentName} kilépett.");
+        }
+
+        // Segédmetódus a hálózati leállás kezelésére
+        private void HandleDisconnection(string message)
+        {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 IsGameOver = true;
-                GameOverMessage = $"A játék megszakadt: {OpponentName} kilépett.";
+                GameOverMessage = message;
+                // A ResetBoard-ot már nem hívjuk,
+                // a kapcsolat már valószínűleg halott.
+                // A gombokat a CanExecute letiltja, mert az IsNetworkGame=true,
+                // de a körök nem egyeznek.
             });
         }
 
@@ -332,23 +354,25 @@ namespace Amoba.ViewModel
             {
                 await Task.Delay(1500);
 
-                if (IsNetworkGame)
-                {
-                    _networkService.Disconnect();
-                }
+                // A hálózati kapcsolatot NEM bontjuk, hogy a visszavágó működjön
+                // if (IsNetworkGame) { _networkService.Disconnect(); }
 
                 DispatcherHelper.CheckBeginInvokeOnUI(() =>
                 {
-                    // ... (A tábla törlésének logikája változatlan)
+                    // A táblát alaphelyzetbe állítjuk
                     foreach (var place in Places) { place.Type = IconType.None; }
+
+                    // Mindegy, hogy hálózati vagy helyi játék,
+                    // a Reset után MINDIG P1 (azaz a Host) kezdi a következő kört.
                     IsPlayer1Turn = true;
                     IsPlayer2Turn = false;
                     isComputerTurn = false;
                     isProcessingAiMove = false;
-                    IsNetworkGame = false;
-                    isVsComputer = false;
-                    OpponentName = "JÁTÉKOS (O)";
-                    IsGameOver = false;
+                    IsGameOver = false; // Az overlay eltüntetése
+
+                    // A CanExecute frissítése:
+                    // Most már a Host (AmIHost=true, IsPlayer1Turn=true) ENGEDÉLYEZVE lesz.
+                    // A Kliens (AmIHost=false, IsPlayer1Turn=true) TILTVA lesz.
                     (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
                 });
             }
