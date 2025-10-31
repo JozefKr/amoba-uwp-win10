@@ -41,7 +41,7 @@ namespace Amoba.Services
         private DataReader _socketReader;
         private DataWriter _socketWriter;
         // ---
-
+        public string CachedOpponentName { get; private set; }
         private HostName _multicastHostName;
         private Timer _broadcastTimer;
         private CancellationTokenSource _readCts;
@@ -212,7 +212,7 @@ namespace Amoba.Services
         // ===================================================================
         // TCP KAPCSOLÓDÁS (JOINER)
         // ===================================================================
-        public async Task ConnectToGameAsync(string hostIpAddress)
+        public async Task ConnectToGameAsync(string hostIpAddress, string myPlayerName)
         {
             try
             {
@@ -223,12 +223,18 @@ namespace Amoba.Services
                 Debug.WriteLine("Kapcsolódás sikeres! Várakozás a Host START üzenetére...");
 
                 // --- Osztályszintű Olvasó/Író létrehozása ---
-                _socketReader = new DataReader(_gameSocket.InputStream);
-                _socketReader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
+                _socketReader = new DataReader(_gameSocket.InputStream)
+                {
+                    UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8
+                };
                 _socketWriter = new DataWriter(_gameSocket.OutputStream);
                 // ---
 
                 StartReading();
+
+                // Elküldjük a nevünket a Hostnak ---
+                await SendMessageAsync($"NAME;{myPlayerName}");
+                Debug.WriteLine($"[CLIENT SEND] Név elküldve: {myPlayerName}");
             }
             catch (Exception ex)
             {
@@ -295,6 +301,13 @@ namespace Amoba.Services
                     GameStarted?.Invoke(this, new GameStartedEventArgs(opponentName, boardSize, false)); // Kliens = false
                 }
             }
+            else if (message.StartsWith("NAME;"))
+            {
+                // Ez a HOST oldalon fut le.
+                string clientName = message.Substring(5);
+                Debug.WriteLine($"[HOST RECV] Kliens név fogadva: {clientName}");
+                this.CachedOpponentName = clientName;
+            }
             else if (message.StartsWith("MOVE:"))
             {
                 if (int.TryParse(message.Substring(5), out int moveIndex))
@@ -334,7 +347,7 @@ namespace Amoba.Services
             await SendMessageAsync("REMATCH;");
         }
 
-        public async Task InitiateNetworkGameStartAsync(int boardSize)
+        public async Task InitiateNetworkGameStartAsync(int boardSize, string myPlayerName)
         {
             if (_gameSocket == null)
             {
@@ -344,12 +357,15 @@ namespace Amoba.Services
             }
             try
             {
-                string hostName = "Host";
-                string message = $"START;{hostName};{boardSize}";
+                string message = $"START;{myPlayerName};{boardSize}";
                 await SendMessageAsync(message);
                 Debug.WriteLine($"[HOST SEND] Start üzenet küldve: {message}");
 
                 string opponentName = _gameSocket.Information.RemoteHostName.DisplayName ?? "Kliens";
+
+                // A Host-nak még meg kell várnia a kliens 'NAME;' üzenetét,
+                // ezért itt az "opponentName" még lehet, hogy nem a végleges.
+                // A GameStarted esemény a Host-on beállítja az alap nevet.
                 GameStarted?.Invoke(this, new GameStartedEventArgs(opponentName, boardSize, true)); // Host = true
             }
             catch (Exception ex)
@@ -425,6 +441,8 @@ namespace Amoba.Services
                 _gameSocket = null;
                 Debug.WriteLine("TCP kapcsolat megszakadt.");
             }
+
+            CachedOpponentName = null;
         }
 
         public void Dispose()

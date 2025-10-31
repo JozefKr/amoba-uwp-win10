@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Windows.Input;
 using Autofac.Core;
 using Autofac;
+using System.Diagnostics;
 
 namespace Amoba.ViewModel
 {
@@ -20,16 +21,18 @@ namespace Amoba.ViewModel
         private bool _isVsComputerMode;
         private bool _isNetworkGame; // Jelzi, hogy Hostként vagyunk-e itt
         private string _statusMessage = string.Empty;
+        private readonly string _myPlayerName;
 
         /// <summary>
         /// Konstruktor HÁLÓZATI (Host) indításhoz. A DI konténer ezt hívja, ha minden paraméter elérhető.
         /// </summary>
-        public GameSizeViewModel(IViewService viewService, INetworkService networkService, bool isVsComputer, bool isNetworkGame = true)
+        public GameSizeViewModel(IViewService viewService, INetworkService networkService, bool isVsComputer, bool isNetworkGame, string myPlayerName)
         {
             _viewService = viewService ?? throw new ArgumentNullException(nameof(viewService));
             _networkService = networkService; // Lehet null, de a hívó (MainViewModel) gondoskodik róla, hogy itt ne legyen az.
             _isVsComputerMode = isVsComputer; // Ez itt mindig false lesz hálózati módban
             _isNetworkGame = isNetworkGame; // Ez itt mindig true lesz
+            _myPlayerName = myPlayerName;
             Enabled = true;
         }
 
@@ -75,8 +78,6 @@ namespace Amoba.ViewModel
         /// <summary>
         /// Végrehajtja a méret kiválasztását. Hálózati módban elküldi a méretet, majd navigál.
         /// </summary>
-        // GameSizeViewModel.cs
-
         private async void SelectSizeMethod(string size)
         {
             if (!Enabled) return;
@@ -89,27 +90,40 @@ namespace Amoba.ViewModel
                 try
                 {
                     var gameParams = new List<Parameter>
-            {
-                new NamedParameter("boardSizeParam", boardSize),
-                new NamedParameter("isVsComputerParam", _isVsComputerMode),
-                new NamedParameter("isNetworkGameParam", _isNetworkGame) // Ez a paraméter kritikus!
-            };
+                    {
+                        new NamedParameter("boardSizeParam", boardSize),
+                        new NamedParameter("isVsComputerParam", _isVsComputerMode),
+                        new NamedParameter("isNetworkGameParam", _isNetworkGame), // Ez a paraméter kritikus!
+                        new NamedParameter("myPlayerNameParam", _myPlayerName)
+                    };
 
                     if (_isNetworkGame && _networkService != null)
                     {
                         // HÁLÓZATI: Host küld méretet
                         StatusMessage = "Méret küldése az ellenfélnek...";
 
-                        // HOZZÁADVA: A Host paramétert CSAK itt adjuk hozzá
+                        // A Host paramétert CSAK itt adjuk hozzá
                         gameParams.Add(new NamedParameter("isHostParam", true));
 
-                        await _networkService.InitiateNetworkGameStartAsync(boardSize);
+                        await _networkService.InitiateNetworkGameStartAsync(boardSize, _myPlayerName);
                     }
                     else
                     {
                         // HELYI/AI JÁTÉK
-                        // HOZZÁADVA: A Host paramétert itt is hozzá kell adni (false-ként)
+                        // A Host paramétert itt is hozzá kell adni (false-ként)
                         gameParams.Add(new NamedParameter("isHostParam", false));
+                    }
+
+                    string opponentName = _networkService?.CachedOpponentName;
+                    if (!string.IsNullOrEmpty(opponentName))
+                    {
+                        gameParams.Add(new NamedParameter("opponentNameParam", opponentName));
+                    }
+                    else if (_isNetworkGame)
+                    {
+                        // Ha hálózati játék, de a név valamiért mégis null,
+                        // legalább naplózzuk, de ne adjunk át üres paramétert.
+                        Debug.WriteLine("FIGYELEM (GameSizeVM): Az ellenfél neve (CachedOpponentName) null maradt a navigáció pillanatában.");
                     }
 
                     // NAVIGÁCIÓ (MINDIG LEFUT)
@@ -119,14 +133,14 @@ namespace Amoba.ViewModel
                 catch (Exception ex)
                 {
                     StatusMessage = $"HIBA: {ex.Message}";
-                    System.Diagnostics.Debug.WriteLine($"Hiba a méret kiválasztása/küldése során: {ex.Message}");
+                    Debug.WriteLine($"Hiba a méret kiválasztása/küldése során: {ex.Message}");
                     Enabled = true;
                 }
             }
             else
             {
                 StatusMessage = "Hiba: Érvénytelen méret.";
-                System.Diagnostics.Debug.WriteLine($"Érvénytelen méret paraméter: {size}");
+                Debug.WriteLine($"Érvénytelen méret paraméter: {size}");
                 Enabled = true;
             }
         }

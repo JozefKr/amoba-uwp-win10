@@ -9,8 +9,8 @@ namespace Amoba.Services
 
     public interface INetworkService
     {
+        string CachedOpponentName { get; }
         // --- Események ---
-
         event EventHandler<GameFoundEventArgs> GameFound; // Kliens: Hostot talált
         event EventHandler<string> NetworkErrorOccurred; // Általános hiba
         event EventHandler OpponentDisconnected; // Kapcsolat megszakadt
@@ -58,12 +58,12 @@ namespace Amoba.Services
         /// <summary>
         /// KLIENS: Megpróbál TCP kapcsolatot létesíteni a megadott Host IP címre.
         /// </summary>
-        Task ConnectToGameAsync(string hostIpAddress);
+        Task ConnectToGameAsync(string hostIpAddress, string myPlayerName);
 
         /// <summary>
         /// HOST: Elküldi a START üzenetet (mérettel) a Kliensnek, és lokálisan is kiváltja a GameStarted eseményt.
         /// </summary>
-        Task InitiateNetworkGameStartAsync(int boardSize);
+        Task InitiateNetworkGameStartAsync(int boardSize, string name);
 
         /// <summary>
         /// Elküldi a helyi játékos lépését (a mező indexét) az ellenfélnek TCP-n.

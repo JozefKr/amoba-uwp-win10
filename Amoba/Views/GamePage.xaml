@@ -126,7 +126,9 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Margin="0,0,40,0" HorizontalAlignment="Right">
-                    <TextBlock Text="JÁTÉKOS (X)" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+                    <TextBlock Text="{Binding MyPlayerName, FallbackValue='JÁTÉKOS (X)'}" 
+                        FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" 
+                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
                     <TextBlock Text="{Binding Player1Score}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer1Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>

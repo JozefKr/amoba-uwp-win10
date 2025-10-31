@@ -68,7 +68,12 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,20"
                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
-
+            
+            <TextBox Header="Játékosneved" 
+                Margin="0,0,0,20"
+                FontSize="18"
+                PlaceholderText="Pl. Pista"
+                Text="{Binding PlayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             <Button
                 x:Name="startHostingButton" 
                 Content="Játék Hostolása (Légy Te a Szerver)" 

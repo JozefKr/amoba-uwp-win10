@@ -28,6 +28,12 @@ namespace Amoba.ViewModel
         private bool _isJoiningGame = false;
         private bool _isSearching = false;
         private string _statusMessage = string.Empty;
+        private string _playerName = "Játékos"; // Alapértelmezett név
+        public string PlayerName
+        {
+            get => _playerName;
+            set => Set(ref _playerName, value);
+        }
 
         // --- Publikus Tulajdonságok a UI-hoz ---
         public ObservableCollection<DiscoveredGame> FoundGames { get; } = new ObservableCollection<DiscoveredGame>();
@@ -90,12 +96,11 @@ namespace Amoba.ViewModel
         private async void ExecuteStartHosting()
         {
             StopDiscovery(); // Leállítjuk a keresést (kölcsönös kizárás)
-            string playerName = "Teszt Host"; // Ezt később egy beviteli mezőből is vehetnénk
 
             try
             {
                 StatusMessage = "Játék hostolása folyamatban, TCP szerver indítása...";
-                await _networkService.StartHostingAsync(playerName); // UDP Hirdetés indítása
+                await _networkService.StartHostingAsync(PlayerName); // UDP Hirdetés indítása
                 await _networkService.StartAcceptingConnectionsAsync(); // TCP Listener indítása
                 StatusMessage = "Hostolás aktív! Várjuk a csatlakozást...";
             }
@@ -146,7 +151,7 @@ namespace Amoba.ViewModel
 
             // A NetworkService.ConnectToGameAsync kezeli a saját hibáit,
             // és a NetworkErrorOccurred eseményen keresztül jelez, ha baj van.
-            await _networkService.ConnectToGameAsync(gameToJoin.IpAddress);
+            await _networkService.ConnectToGameAsync(gameToJoin.IpAddress, PlayerName);
 
             // Ha sikeres, várunk a Hostra. Ha sikertelen, a NetworkErrorOccurred kezeli.
             StatusMessage = "Sikeresen csatlakozva. Várakozás a Hostra...";
@@ -195,7 +200,8 @@ namespace Amoba.ViewModel
                 var networkParams = new List<Parameter>
                 {
                      new NamedParameter("isVsComputer", false),
-                     new NamedParameter("isNetworkGame", true)
+                     new NamedParameter("isNetworkGame", true),
+                     new NamedParameter("myPlayerName", this.PlayerName)
                 };
                 _viewService.OpenPage<GameSizeViewModel>(networkParams.ToArray());
             });
@@ -216,7 +222,11 @@ namespace Amoba.ViewModel
                          new NamedParameter("boardSizeParam", e.BoardSize),
                          new NamedParameter("isVsComputerParam", false),
                          new NamedParameter("isNetworkGameParam", true),
-                         new NamedParameter("isHostParam", false) // ÉN A KLIENS VAGYOK
+                         new NamedParameter("isHostParam", false), // ÉN A KLIENS VAGYOK
+                         // Átadjuk a Kliens nevét a GameViewModel-nek
+                         new NamedParameter("myPlayerNameParam", this.PlayerName),
+                         // Átadjuk a Host nevét (amit az eseményben kaptunk)
+                         new NamedParameter("opponentNameParam", e.OpponentName)
                     };
                     _viewService.OpenPage<GameViewModel>(networkParams.ToArray());
                 });

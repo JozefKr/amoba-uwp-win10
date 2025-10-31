@@ -44,6 +44,7 @@ namespace Amoba.ViewModel
         private bool _isNetworkGame = false;
         private bool _amIHost = false;
         private string _opponentName = string.Empty;
+        private string _myPlayerName;
 
         // --- PUBLIKUS PROPERTY-K ---
         public int BoardSize { get => boardSize; set => Set(ref boardSize, value); }
@@ -70,6 +71,11 @@ namespace Amoba.ViewModel
         public bool IsNetworkGame { get => _isNetworkGame; set => Set(ref _isNetworkGame, value); }
         public bool AmIHost { get => _amIHost; set => Set(ref _amIHost, value); }
         public string OpponentName { get => _opponentName; set => Set(ref _opponentName, value); }
+        public string MyPlayerName
+        {
+            get => _myPlayerName;
+            set => Set(ref _myPlayerName, value);
+        }
         public bool IsGameOver
         {
             get => _isGameOver;
@@ -110,7 +116,10 @@ namespace Amoba.ViewModel
         // --- KONSTRUKTOR ÉS INITIALIZÁLÁS ---
         // ===================================================================
 
-        public GameViewModel(IViewService viewService, int boardSizeParam, bool isVsComputerParam, bool isNetworkGameParam, bool isHostParam, INetworkService networkService)
+        public GameViewModel(IViewService viewService, int boardSizeParam, bool isVsComputerParam,
+                     bool isNetworkGameParam, bool isHostParam, INetworkService networkService,
+                     string myPlayerNameParam = null,
+                     string opponentNameParam = null)
         {
             _viewService = viewService;
             _networkService = networkService;
@@ -118,6 +127,24 @@ namespace Amoba.ViewModel
             // 1. ÁLLAPOTOK BEÁLLÍTÁSA A PARAMÉTEREKBŐL
             _isNetworkGame = isNetworkGameParam;
             _amIHost = isHostParam;
+
+            // --- SAJÁT NÉV BEÁLLÍTÁSA ---
+            MyPlayerName = "JÁTÉKOS (X)"; // Alapértelmezett
+            if (isNetworkGameParam && !string.IsNullOrEmpty(myPlayerNameParam))
+            {
+                // Ha hálózati játék, és kaptunk nevet, felülírjuk
+                MyPlayerName = myPlayerNameParam;
+            }
+
+            // =======================================================
+            // --- JAVÍTÁS: EGYSÉGES ELLENFÉL NÉV BEÁLLÍTÁS ---
+            // =======================================================
+            // Mindegy, hogy Host vagy Kliens, ha kaptunk opponentNameParam-ot
+            // a navigáció során, akkor azt használjuk.
+            if (!string.IsNullOrEmpty(opponentNameParam))
+            {
+                OpponentName = opponentNameParam;
+            }
 
             // 2. FELIRATKOZÁS (Csak ha hálózati játék)
             if (_isNetworkGame)
