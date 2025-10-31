@@ -297,14 +297,40 @@ namespace Amoba.ViewModel
             {
                 string title;
                 string message;
-                if (winner == IconType.Cross) { title = "Győzelem!"; message = "Játékos (X) Nyert!"; Player1Score++; }
-                else if (winner == IconType.Circle) { title = isVsComputer ? "Vereség!" : "Játékos (O) Nyert!"; message = isVsComputer ? "A Gép Nyert!" : "Játékos (O) Nyert!"; Player2Score++; }
-                else { title = "Döntetlen!"; message = "A tábla megtelt!"; }
 
-                // Játék vége: Megjelenítjük a dialógust
-                TriggerGameOver(title, message);
+                if (winner == IconType.Cross) // Játékos 1 (X) nyert
+                {
+                    //  A cím (Title) a te nézőpontodból
+                    // Helyi/AI módban X mindig te vagy (Győzelem).
+                    // Hálózati módban X akkor vagy te, ha te vagy a Host (Győzelem).
+                    title = (!IsNetworkGame || AmIHost) ? "Győzelem!" : "Vereség!";
+
+                    // Az üzenet (Message) a dinamikus nevet használja
+                    message = $"{MyPlayerName} Nyert!";
+                    Player1Score++;
+                }
+                else if (winner == IconType.Circle) // Játékos 2 (O) nyert
+                {
+                    // A cím (Title) a te nézőpontodból
+                    // AI módban O a gép (Vereség).
+                    // Hálózati módban O akkor vagy te, ha Kliens vagy (Győzelem).
+                    title = (IsNetworkGame && !AmIHost) ? "Győzelem!" : "Vereség!";
+
+                    // Az üzenet (Message) az ellenfél nevét használja
+                    // (ami AI módban "A GÉP", hálózati módban pedig a beírt neve)
+                    message = $"{OpponentName} Nyert!";
+                    Player2Score++;
+                }
+                else // Döntetlen
+                {
+                    title = "Döntetlen!";
+                    message = "A tábla megtelt!";
+                }
+
+                // Játék vége: Beállítjuk az állapotot és az üzenetet
+                TriggerGameOver(title, message);
                 return true; // A játék véget ért
-            }
+            }
             else
             {
                 // Nincs győztes, a játék folytatódik
