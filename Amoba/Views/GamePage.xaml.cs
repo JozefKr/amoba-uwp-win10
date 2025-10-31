@@ -38,7 +38,6 @@ namespace Amoba.Views
                 // 2. Keressük meg a Storyboard-ot az erőforrások között
                 if (rootBorder.Resources.TryGetValue("PopInStoryboard", out object resource) && resource is Storyboard storyboard)
                 {
-
                     if (e.NewSize.Width > 0 && e.PreviousSize.Width == 0)
                     {
                         // === A) KÉP MEGJELENIK (X vagy O) ===

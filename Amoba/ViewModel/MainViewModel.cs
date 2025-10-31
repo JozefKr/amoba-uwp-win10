@@ -9,6 +9,7 @@ using System.Linq;
 using System.Windows.Input;
 using Autofac.Core; // Szükséges a NamedParameterhez
 using Autofac;
+using Windows.Storage;
 
 namespace Amoba.ViewModel
 {
@@ -28,11 +29,22 @@ namespace Amoba.ViewModel
         private bool _isJoiningGame = false;
         private bool _isSearching = false;
         private string _statusMessage = string.Empty;
-        private string _playerName = "Játékos"; // Alapértelmezett név
+        private const string PlayerNameSettingsKey = "PlayerName";
+        private string _playerName;
         public string PlayerName
         {
             get => _playerName;
-            set => Set(ref _playerName, value);
+            set
+            {
+                // Csak akkor fut le, ha az érték tényleg változott
+                if (Set(ref _playerName, value))
+                {
+                    // =======================================================
+                    // A változás azonnali mentése
+                    SavePlayerName(value);
+                    // =======================================================
+                }
+            }
         }
 
         // --- Publikus Tulajdonságok a UI-hoz ---
@@ -59,6 +71,8 @@ namespace Amoba.ViewModel
             _viewService = viewService;
             _networkService = networkService;
 
+            LoadPlayerName();
+
             // Feliratkozás a hálózati eseményekre
             _networkService.GameFound += NetworkService_GameFound;
             _networkService.NetworkErrorOccurred += NetworkService_NetworkErrorOccurred;
@@ -66,6 +80,30 @@ namespace Amoba.ViewModel
             _networkService.GameStarted += NetworkService_GameStarted; // Kliens navigál a Game-re
 
             StartDiscovery(); // Automatikus keresés indítása a főoldal megnyitásakor
+        }
+
+        private void SavePlayerName(string name)
+        {
+            ApplicationDataContainer settings = ApplicationData.Current.LocalSettings;
+            settings.Values[PlayerNameSettingsKey] = name;
+        }
+
+        private void LoadPlayerName()
+        {
+            // 1. Elérjük az alkalmazás helyi beállításait
+            ApplicationDataContainer settings = ApplicationData.Current.LocalSettings;
+
+            // 2. Megnézzük, létezik-e a kulcs
+            if (settings.Values.ContainsKey(PlayerNameSettingsKey))
+            {
+                // Ha igen, betöltjük az eltárolt nevet
+                _playerName = settings.Values[PlayerNameSettingsKey] as string;
+            }
+            else
+            {
+                // Ha nem (pl. első indítás), beállítjuk az alapértelmezettet
+                _playerName = "Játékos";
+            }
         }
 
         // ===================================================================
