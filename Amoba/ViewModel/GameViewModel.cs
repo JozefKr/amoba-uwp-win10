@@ -35,6 +35,8 @@ namespace Amoba.ViewModel
         private readonly object _gameOverLock = new object();
         // Ez fogja jelezni, ha megérkezett a LEAVE_ACK
         private TaskCompletionSource<bool> _leaveAckTcs;
+        private bool _isNavigatingToMenu = false;
+        private ICommand _mainMenuCommand;
 
         // --- HÁLÓZATI MEZŐK ---
         private readonly INetworkService _networkService;
@@ -67,7 +69,20 @@ namespace Amoba.ViewModel
         public bool IsNetworkGame { get => _isNetworkGame; set => Set(ref _isNetworkGame, value); }
         public bool AmIHost { get => _amIHost; set => Set(ref _amIHost, value); }
         public string OpponentName { get => _opponentName; set => Set(ref _opponentName, value); }
-        public bool IsGameOver { get => _isGameOver; set => Set(ref _isGameOver, value); }
+        public bool IsGameOver
+        {
+            get => _isGameOver;
+            set
+            {
+                if (Set(ref _isGameOver, value))
+                {
+                    // Értesítjük a UI-t, hogy az inverz property is változott
+                    RaisePropertyChanged(nameof(IsGameInProgress));
+                }
+            }
+        }
+        // Ez az IsGameOver fordítottja. Akkor true, amikor a játék Még FOLYIK.
+        public bool IsGameInProgress => !IsGameOver;
         public string GameOverMessage { get => _gameOverMessage; set => Set(ref _gameOverMessage, value); }
         public ObservableCollection<Place> Places { get => places; set => Set(ref places, value); }
 
@@ -88,6 +103,7 @@ namespace Amoba.ViewModel
             ));
         }
         public ICommand NewGameCommand => newGameCommand ?? (newGameCommand = new RelayCommand(ExecuteNewGameAsync));
+        public ICommand MainMenuCommand => _mainMenuCommand ?? (_mainMenuCommand = new RelayCommand(async () => await ExecuteMainMenuAsync()));
 
         // ===================================================================
         // --- KONSTRUKTOR ÉS INITIALIZÁLÁS ---
@@ -150,8 +166,8 @@ namespace Amoba.ViewModel
         // Ez a "Visszavágó" gomb logikája
         private async void ExecuteNewGameAsync()
         {
-            Player1Score = 0;
-            Player2Score = 0;
+            //Player1Score = 0;
+            //Player2Score = 0;
 
             if (IsNetworkGame && _networkService != null)
             {
@@ -170,6 +186,43 @@ namespace Amoba.ViewModel
 
             // 2. A küldő is alaphelyzetbe állítja a saját tábláját
             ResetBoard();
+        }
+
+        private async Task ExecuteMainMenuAsync()
+        {
+            // Hálózati játék esetén megpróbálunk kulturáltan kilépni
+            if (IsNetworkGame && _networkService != null)
+            {
+                try
+                {
+                    _leaveAckTcs = new TaskCompletionSource<bool>();
+                    Debug.WriteLine("ExecuteMainMenu: LEAVE üzenet küldése...");
+                    await _networkService.SendLeaveGameAsync();
+
+                    // Várunk a nyugtára VAGY időtúllépésre
+                    await Task.WhenAny(_leaveAckTcs.Task, Task.Delay(2000));
+
+                    if (_leaveAckTcs.Task.IsCompleted)
+                        Debug.WriteLine("ExecuteMainMenu: LEAVE_ACK megérkezett!");
+                    else
+                        Debug.WriteLine("ExecuteMainMenu: LEAVE_ACK időtúllépés!");
+                }
+                catch (Exception ex)
+                {
+                    // Ha a küldés hibát dob (pl. a másik már bontott),
+                    // az nem baj, a HandleDisconnection kezeli a navigációt.
+                    Debug.WriteLine($"Hiba a 'Leave' küldésekor (elkapva): {ex.Message}");
+                    HandleDisconnection("Hiba a kilépés jelzésekor.");
+
+                    // Fontos: Mivel a HandleDisconnection már navigál,
+                    // itt kilépünk, hogy ne hívjuk a GoToMainMenu-t kétszer.
+                    return;
+                }
+            }
+
+            // Ha nem hálózati játék, VAGY a hálózati küldés sikeres volt (nem dobott hibát),
+            // akkor a normál GoToMainMenu-t hívjuk.
+            GoToMainMenu();
         }
 
         private async void SetImageMethod(Place place)
@@ -226,7 +279,7 @@ namespace Amoba.ViewModel
                 else { title = "Döntetlen!"; message = "A tábla megtelt!"; }
 
                 // Játék vége: Megjelenítjük a dialógust
-                await ShowGameOverDialogAsync(title, message);
+                TriggerGameOver(title, message);
                 return true; // A játék véget ért
             }
             else
@@ -360,8 +413,8 @@ namespace Amoba.ViewModel
                 try
                 {
                     Debug.WriteLine("Visszavágó kérés fogadva, tábla törlése...");
-                    Player1Score = 0;
-                    Player2Score = 0;
+                    //Player1Score = 0;
+                    //Player2Score = 0;
 
                     // 1. Dialógus bezárása
                     // Bezárjuk a "Győzelem/Vereség" dialógust, hogy a tábla láthatóvá váljon.
@@ -522,104 +575,46 @@ namespace Amoba.ViewModel
             });
         }
 
-        // Ez a felugró ablak a játék végén
-        private async Task ShowGameOverDialogAsync(string title, string message)
+        /// <summary>
+        /// Beállítja a Játék Vége állapotot, kiírja az üzenetet,
+        /// majd 2 másodperc múlva automatikusan alaphelyzetbe állítja a táblát.
+        /// </summary>
+        private async void TriggerGameOver(string title, string message)
         {
+            // UI szálra váltunk
             await DispatcherHelper.RunAsync(async () =>
             {
-                bool navigateToMenu = false; // Jelző, hogy a főmenübe kell-e lépni
-
                 lock (_gameOverLock)
                 {
-                    if (IsGameOver) return;
+                    if (IsGameOver) return; // Már lekezeltük
                     IsGameOver = true;
                 }
 
-                try
+                // 1. Beállítjuk az új UI property-t
+                GameOverMessage = $"{title} {message}";
+
+                // 2. Frissítjük a CanExecute állapotokat (tábla letiltása)
+                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+
+                // 3. VÁRUNK 2 MÁSODPERCET, hogy a játékos lássa az üzenetet
+                await Task.Delay(2000);
+
+                // 4. Automatikusan hívjuk a Visszavágót (ResetBoard)
+                // (Csak akkor, ha közben nem navigáltunk el a Főmenübe)
+                bool navigating;
+                lock (_gameOverLock)
                 {
-                    _activeGameOverDialog = new ContentDialog
-                    {
-                        Title = title,
-                        Content = message,
-                        PrimaryButtonText = "Visszavágó",
-                        SecondaryButtonText = "Főmenü",
-                    };
-
-                    var result = await _activeGameOverDialog.ShowAsync();
-                    _activeGameOverDialog = null;
-
-                    if (result == ContentDialogResult.Primary)
-                    {
-                        // "VISSZAVÁGÓ"
-                        ExecuteNewGameAsync();
-                    }
-                    else if (result == ContentDialogResult.Secondary)
-                    {
-                        // "FŐMENÜ"
-                        navigateToMenu = true; // Jelezzük, hogy a főmenübe akarunk lépni
-
-                        // 5. TISZTA KILÉPÉSI ÜZENET KÜLDÉSE
-                        if (IsNetworkGame && _networkService != null)
-                        {
-                            try
-                            {
-                                // 1. Létrehozunk egy "jelzőt", amire várunk
-                                _leaveAckTcs = new TaskCompletionSource<bool>();
-
-                                // 2. Elküldjük a LEAVE üzenetet
-                                Debug.WriteLine("ShowGameOver: LEAVE üzenet küldése...");
-                                await _networkService.SendLeaveGameAsync();
-
-                                // 3. Várunk az ACK-ra (LeaveAcknowledged esemény)
-                                // VAGY várunk max 2 másodpercet (timeout)
-                                Debug.WriteLine("ShowGameOver: Várakozás a LEAVE_ACK nyugtára (max 2s)...");
-                                await Task.WhenAny(_leaveAckTcs.Task, Task.Delay(2000));
-
-                                if (_leaveAckTcs.Task.IsCompleted)
-                                    Debug.WriteLine("ShowGameOver: LEAVE_ACK megérkezett!");
-                                else
-                                    Debug.WriteLine("ShowGameOver: LEAVE_ACK időtúllépés!");
-                            }
-                            catch (Exception ex)
-                            {
-                                // Ez fogja biztosítani, hogy a 'finally' blokk ne fusson le
-                                // (mert a HandleDisconnection már elnavigál).
-                                // VAGY ha mégis lefut, a Cleanup már megtörtént.
-                                HandleDisconnection("Hiba a kilépés jelzésekor.");
-
-                                // Fontos: Mivel a HandleDisconnection már elnavigál,
-                                // megakadályozzuk, hogy a 'finally' blokk is megpróbálja.
-                                navigateToMenu = false;
-                            }
-                        }
-                    }
-                    // Ha a result == ContentDialogResult.None (mert Hide() zárta be)
-                    // akkor nem csinálunk semmit.
+                    navigating = _isNavigatingToMenu;
                 }
-                catch (Exception ex)
+
+                if (!navigating && IsGameOver) // Ha még mindig a játékban vagyunk
                 {
-                    // 7. ÁLTALÁNOS HIBAKEZELÉS (ha a ShowAsync hibát dob)
-                    Debug.WriteLine($"FATALIS Hiba a ShowGameOverDialogAsync-ban: {ex.Message}");
-                    if (IsNetworkGame)
-                    {
-                        HandleDisconnection("Váratlan hiba a dialógusban (pl. Hide).");
-                        navigateToMenu = false;
-                    }
-                    // Ha nem hálózati játék, akkor a régi viselkedés marad (finally visz tovább)
-                    else
-                    {
-                        navigateToMenu = true;
-                    }
+                    Debug.WriteLine("TriggerGameOver: Automatikus Visszavágó (ResetBoard) indítása...");
+                    ResetBoard();
                 }
-                finally
+                else
                 {
-                    // 8. VÉGREHAJTÁS
-                    // Ez a blokk garantálja, hogy a navigáció CSAK a hálózati
-                    // műveletek (vagy hibák) UTÁN történik meg.
-                    if (navigateToMenu)
-                    {
-                        GoToMainMenu(); // TAKARÍTÁS ÉS NAVIGÁLÁS
-                    }
+                    Debug.WriteLine("TriggerGameOver: Automatikus Visszavágó kihagyva (navigáció folyamatban).");
                 }
             });
         }
@@ -629,6 +624,23 @@ namespace Amoba.ViewModel
         /// </summary>
         private void GoToMainMenu()
         {
+            // A zárolást atomikusan ellenőrizzük és állítjuk be
+            lock (_gameOverLock)
+            {
+                // Ha egy másik esemény (pl. OpponentLeft) már elindította
+                // a navigációt, akkor ez a hívás nem csinál semmit.
+                if (_isNavigatingToMenu)
+                {
+                    Debug.WriteLine("GoToMainMenu: Navigáció már folyamatban, kérés kihagyva.");
+                    return;
+                }
+
+                // Beállítjuk a zárat, hogy mi legyünk az egyetlenek,
+                // akik navigálhatnak.
+                _isNavigatingToMenu = true;
+                Debug.WriteLine("GoToMainMenu: Navigáció elindítva.");
+            }
+
             // A Cleanup() gondoskodik a Disconnect-ről és a leiratkozásokról
             Cleanup();
 
@@ -651,8 +663,18 @@ namespace Amoba.ViewModel
                 // Megakadályozza a ShowGameOverDialogAsync-val (játék vége) való versenyhelyzetet.
                 lock (_gameOverLock)
                 {
-                    if (IsGameOver) return; // Egy másik dialógus (játék vége) már aktív.
-                    IsGameOver = true;      // Zároljuk.
+                    if (IsGameOver)
+                    {
+                        // A játék már véget ért (a "Game Over" panel látszik),
+                        // de közben hálózati hiba történt (pl. lépésküldéskor).
+                        // Nem lépünk ki, hagyjuk, hogy a GoToMainMenu() lefusson.
+                        Debug.WriteLine("HandleDisconnection: IsGameOver már 'true' volt.");
+                    }
+                    else
+                    {
+                        // A játék még futott, most zároljuk.
+                        IsGameOver = true;
+                    }
                 }
 
                 // Ez a "végső mentsvár". Ha a GoToMainMenu() hibát dob
@@ -715,6 +737,15 @@ namespace Amoba.ViewModel
                     // FONTOS: Az IsGameOver-t false-ra állítjuk,
                     // hogy a következő játék elindulhasson.
                     IsGameOver = false;
+
+                    // 5. ÜZENET TÖRLÉSE
+                    GameOverMessage = string.Empty;
+
+                    // 6. NAVIGÁCIÓS ZÁR FELOLDÁSA
+                    lock (_gameOverLock)
+                    {
+                        _isNavigatingToMenu = false;
+                    }
 
                     (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
                 });
