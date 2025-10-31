@@ -38,7 +38,7 @@ namespace Amoba
         /// <param name="sender">Az esemény forrása (maga az App objektum).</param>
         /// <param name="e">Az esemény adatai, amely tartalmazza a kivételt (Exception)
         /// és egy 'Handled' (lekezelt) tulajdonságot.</param>
-        private void OnUnhandledException(object sender, Windows.UI.Xaml.UnhandledExceptionEventArgs e)
+        private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             // A 'Handled' true-ra állításával jelezzük a rendszernek,
             // hogy "láttuk" a hibát, és (opcionálisan) megpróbáljuk

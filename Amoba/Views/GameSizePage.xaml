@@ -12,6 +12,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
@@ -26,40 +27,15 @@
                     VerticalAlignment="Center"
                     MaxWidth="400">
 
-            <Button 
-                Content="3 x 3" 
-                Margin="0,0,0,20" 
-                FontSize="20" 
-                Command="{Binding SelectSize}" 
-                CommandParameter="3"
-                IsEnabled="{Binding Enabled}"
-                MinHeight="50"
-                HorizontalAlignment="Stretch"
-                Background="{ThemeResource SystemControlHighlightAccentBrush}"
-                Foreground="White"/>
-
-            <Button 
-                Content="4 x 4" 
-                Margin="0,0,0,20" 
-                FontSize="20" 
-                Command="{Binding SelectSize}" 
-                CommandParameter="4"
-                IsEnabled="{Binding Enabled}"
-                MinHeight="50"
-                HorizontalAlignment="Stretch"
-                Background="{ThemeResource SystemControlHighlightAccentBrush}"
-                Foreground="White" />
-
-            <Button 
-                Content="5 x 5" 
-                Margin="0,0,0,0" FontSize="20" 
-                Command="{Binding SelectSize}" 
-                CommandParameter="5"
-                IsEnabled="{Binding Enabled}"
-                MinHeight="50"
-                HorizontalAlignment="Stretch"
-                Background="{ThemeResource SystemControlHighlightAccentBrush}"
-                Foreground="White" />
+            <Button Content="3 x 3" Margin="0,0,0,20" Command="{Binding SelectSize}" CommandParameter="3" IsEnabled="{Binding Enabled}" MinHeight="50" HorizontalAlignment="Stretch" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White"/>
+            <Button Content="4 x 4" Margin="0,0,0,20" Command="{Binding SelectSize}" CommandParameter="4" IsEnabled="{Binding Enabled}" MinHeight="50" HorizontalAlignment="Stretch" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" />
+            <Button Content="5 x 5" Margin="0,0,0,0" Command="{Binding SelectSize}" CommandParameter="5" IsEnabled="{Binding Enabled}" MinHeight="50" HorizontalAlignment="Stretch" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" />
         </StackPanel>
+
+        <TextBlock Grid.Row="2" 
+                   Text="{Binding StatusMessage}"
+                   Foreground="Green" TextWrapping="Wrap"
+                   Margin="0,20,0,0" HorizontalAlignment="Center"
+                   VerticalAlignment="Bottom" Style="{ThemeResource BaseTextBlockStyle}"/>
     </Grid>
 </local:BasePage>

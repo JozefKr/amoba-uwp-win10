@@ -101,8 +101,8 @@
                 Foreground="White"
                 MinHeight="40" />
 
-            <TextBlock Text="{Binding HostingStatusMessage}"
-                       Foreground="Red"
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="Green"
                        TextWrapping="Wrap"
                        Margin="0,0,0,10"
                        HorizontalAlignment="Center"
