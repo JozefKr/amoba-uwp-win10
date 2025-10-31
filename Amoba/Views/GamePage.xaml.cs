@@ -15,8 +15,9 @@ namespace Amoba.Views
         }
 
         /// <summary>
-        /// Ez a metódus fut le, amikor az Image mérete megváltozik (pl. Kép betöltődik).
-        /// Elindítja a "PopInStoryboard" animációt.
+        /// Ez a metódus fut le, amikor az Image mérete megváltozik.
+        /// Elindítja az animációt (ha a kép megjelenik),
+        /// és leállítja az animációt (ha a kép eltűnik).
         /// </summary>
         private void CellImage_SizeChanged(object sender, SizeChangedEventArgs e)
         {
@@ -25,46 +26,51 @@ namespace Amoba.Views
                 var image = sender as Image;
                 if (image == null) return;
 
-                // Csak akkor animálunk, ha a kép üresről (0-s méret) vált láthatóra (nem-0 méret).
-                // Ez megakadályozza, hogy az animáció lefusson pl. ablakátméretezéskor.
-                if (e.NewSize.Width > 0 && e.PreviousSize.Width == 0)
+                // 1. Keressük meg a szülő Border-t, hogy elérjük a Storyboard-ot
+                DependencyObject parent = VisualTreeHelper.GetParent(image);
+                while (parent != null && !(parent is Border))
                 {
-                    // 1. Keressük meg a szülő Border-t, hogy elérjük a Storyboard-ot
-                    DependencyObject parent = VisualTreeHelper.GetParent(image);
-                    while (parent != null && !(parent is Border))
-                    {
-                        parent = VisualTreeHelper.GetParent(parent);
-                    }
-                    var rootBorder = parent as Border;
-                    if (rootBorder == null) return;
+                    parent = VisualTreeHelper.GetParent(parent);
+                }
+                var rootBorder = parent as Border;
+                if (rootBorder == null) return;
 
-                    // 2. Keressük meg a Storyboard-ot az erőforrások között
-                    if (rootBorder.Resources.TryGetValue("PopInStoryboard", out object resource) && resource is Storyboard storyboard)
+                // 2. Keressük meg a Storyboard-ot az erőforrások között
+                if (rootBorder.Resources.TryGetValue("PopInStoryboard", out object resource) && resource is Storyboard storyboard)
+                {
+
+                    if (e.NewSize.Width > 0 && e.PreviousSize.Width == 0)
                     {
-                        // 3. Keressük meg a ScaleTransform-ot az Image-en
+                        // === A) KÉP MEGJELENIK (X vagy O) ===
+
+                        // Keressük meg a ScaleTransform-ot az Image-en
                         var scaleTransform = image.RenderTransform as ScaleTransform;
                         if (scaleTransform == null) return;
 
-                        // 4. KRITIKUS LÉPÉS: Manuálisan hozzárendeljük az animációkat
-                        // A Storyboard-nak megmondjuk, MELYIK konkrét elemen fusson le.
-
-                        // storyboard.Children[0] az Opacity animáció (TargetName="CellImage")
+                        // Manuálisan hozzárendeljük az animációkat
                         Storyboard.SetTarget(storyboard.Children[0], image);
-
-                        // storyboard.Children[1] a ScaleX animáció (TargetName="CellImageScale")
                         Storyboard.SetTarget(storyboard.Children[1], scaleTransform);
-
-                        // storyboard.Children[2] a ScaleY animáció (TargetName="CellImageScale")
                         Storyboard.SetTarget(storyboard.Children[2], scaleTransform);
 
-                        // 5. Animáció indítása
+                        // Animáció indítása
                         storyboard.Begin();
+                    }
+                    else if (e.NewSize.Width == 0 && e.PreviousSize.Width > 0)
+                    {
+                        // === B) KÉP ELTŰNIK (ResetBoard hívás) ===
+
+                        // AZONNAL LEÁLLÍTJUK az éppen futó animációt.
+                        // Ez megakadályozza a COMException-t, mert
+                        // mire a rendszer eltávolítja a képet, az animáció már nem fut.
+                        storyboard.Stop();
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Animációs hiba (SizeChanged): {ex.Message}");
+                // A "No installed components" hiba itt elkapásra kerül,
+                // de a 'storyboard.Stop()' hívás megakadályozza a fő összeomlást.
+                Debug.WriteLine($"Animációs hiba (SizeChanged): {ex.Message}");
             }
         }
     }
