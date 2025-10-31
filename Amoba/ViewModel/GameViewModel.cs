@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls; // Szükséges a ContentDialog-hoz
 
 namespace Amoba.ViewModel
@@ -624,28 +625,56 @@ namespace Amoba.ViewModel
         /// </summary>
         private void GoToMainMenu()
         {
-            // A zárolást atomikusan ellenőrizzük és állítjuk be
+            bool shouldNavigate = false;
+
+            // 1. Atomikusan ellenőrizzük és beállítjuk a navigációs zárat
             lock (_gameOverLock)
             {
-                // Ha egy másik esemény (pl. OpponentLeft) már elindította
-                // a navigációt, akkor ez a hívás nem csinál semmit.
-                if (_isNavigatingToMenu)
+                if (!_isNavigatingToMenu)
+                {
+                    _isNavigatingToMenu = true;
+                    shouldNavigate = true;
+                    Debug.WriteLine("GoToMainMenu: Navigáció elindítva.");
+                }
+                else
                 {
                     Debug.WriteLine("GoToMainMenu: Navigáció már folyamatban, kérés kihagyva.");
-                    return;
                 }
-
-                // Beállítjuk a zárat, hogy mi legyünk az egyetlenek,
-                // akik navigálhatnak.
-                _isNavigatingToMenu = true;
-                Debug.WriteLine("GoToMainMenu: Navigáció elindítva.");
             }
 
-            // A Cleanup() gondoskodik a Disconnect-ről és a leiratkozásokról
+            // 2. Ha egy másik esemény már elindította a navigációt, nem teszünk semmit
+            if (!shouldNavigate)
+            {
+                return;
+            }
+
+            // 3. A Cleanup() gondoskodik a Disconnect-ről és a leiratkozásokról
             Cleanup();
 
-            // Visszanavigálunk a főoldalra
-            _viewService?.OpenPage<MainViewModel>();
+            // 4. A navigációt és az előzmények törlését a UI szálon végezzük
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                try
+                {
+                    // 4A. Lekérjük az alkalmazás fő navigációs Frame-jét
+                    var rootFrame = Window.Current.Content as Frame;
+                    if (rootFrame == null) return;
+
+                    // 4B. A meglévő IViewService hívásával elnavigálunk.
+                    // Ez biztosítja, hogy a MainViewModel -> MainPage konverzió működjön.
+                    _viewService?.OpenPage<MainViewModel>();
+
+                    // 4C. A NAVIGÁCIÓ UTÁN AZONNAL TÖRÖLJÜK AZ ELŐZMÉNYEKET
+                    // Ez a kulcs: eltávolítja a GamePage-et a "vissza" listáról.
+                    rootFrame.BackStack.Clear();
+
+                    Debug.WriteLine("GoToMainMenu: Navigáció Főoldalra sikeres, előzmények törölve.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"FATALIS Hiba a GoToMainMenu navigációja közben: {ex.Message}");
+                }
+            });
         }
 
         // GameViewModel.cs
