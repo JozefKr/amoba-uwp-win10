@@ -167,14 +167,11 @@ namespace Amoba.ViewModel
         // Ez a "Visszavágó" gomb logikája
         private async void ExecuteNewGameAsync()
         {
-            //Player1Score = 0;
-            //Player2Score = 0;
-
+            // 1. Elküldjük a VISSZAVÁGÓ kérést
             if (IsNetworkGame && _networkService != null)
             {
                 try
                 {
-                    // 1. Elküldjük a VISSZAVÁGÓ kérést
                     await _networkService.SendRematchRequestAsync();
                 }
                 catch (Exception ex)
@@ -186,6 +183,7 @@ namespace Amoba.ViewModel
             }
 
             // 2. A küldő is alaphelyzetbe állítja a saját tábláját
+            // (A pontszámokat NEM nullázzuk)
             ResetBoard();
         }
 
@@ -576,14 +574,13 @@ namespace Amoba.ViewModel
             });
         }
 
-        /// <summary>
-        /// Beállítja a Játék Vége állapotot, kiírja az üzenetet,
-        /// majd 2 másodperc múlva automatikusan alaphelyzetbe állítja a táblát.
+        /// Beállítja a Játék Vége állapotot és a győzelmi üzenetet.
+        /// NEM indít automatikus visszavágót.
         /// </summary>
-        private async void TriggerGameOver(string title, string message)
+        private void TriggerGameOver(string title, string message)
         {
             // UI szálra váltunk
-            await DispatcherHelper.RunAsync(async () =>
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 lock (_gameOverLock)
                 {
@@ -594,29 +591,9 @@ namespace Amoba.ViewModel
                 // 1. Beállítjuk az új UI property-t
                 GameOverMessage = $"{title} {message}";
 
-                // 2. Frissítjük a CanExecute állapotokat (tábla letiltása)
+                // 2. Frissítjük a CanExecute állapotokat
+                // (Letiltja a táblát, és aktiválja/deaktiválja az AppBar gombokat)
                 (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
-
-                // 3. VÁRUNK 2 MÁSODPERCET, hogy a játékos lássa az üzenetet
-                await Task.Delay(2000);
-
-                // 4. Automatikusan hívjuk a Visszavágót (ResetBoard)
-                // (Csak akkor, ha közben nem navigáltunk el a Főmenübe)
-                bool navigating;
-                lock (_gameOverLock)
-                {
-                    navigating = _isNavigatingToMenu;
-                }
-
-                if (!navigating && IsGameOver) // Ha még mindig a játékban vagyunk
-                {
-                    Debug.WriteLine("TriggerGameOver: Automatikus Visszavágó (ResetBoard) indítása...");
-                    ResetBoard();
-                }
-                else
-                {
-                    Debug.WriteLine("TriggerGameOver: Automatikus Visszavágó kihagyva (navigáció folyamatban).");
-                }
             });
         }
 
@@ -657,8 +634,7 @@ namespace Amoba.ViewModel
                 try
                 {
                     // 4A. Lekérjük az alkalmazás fő navigációs Frame-jét
-                    var rootFrame = Window.Current.Content as Frame;
-                    if (rootFrame == null) return;
+                    if (!(Window.Current.Content is Frame rootFrame)) return;
 
                     // 4B. A meglévő IViewService hívásával elnavigálunk.
                     // Ez biztosítja, hogy a MainViewModel -> MainPage konverzió működjön.

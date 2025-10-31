@@ -66,10 +66,14 @@
         <CommandBar Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}" 
                     Opacity="0.9"
                     ClosedDisplayMode="Compact">
+            <AppBarButton Icon="Refresh" 
+                      Label="Visszavágó" 
+                      Command="{Binding NewGameCommand}"
+                      IsEnabled="{Binding IsGameOver}"/>
+            
             <AppBarButton Icon="Home" 
                           Label="Főmenü" 
-                          Command="{Binding MainMenuCommand}"
-                          IsEnabled="{Binding IsGameInProgress}"/>
+                          Command="{Binding MainMenuCommand}"/>
         </CommandBar>
     </Page.BottomAppBar>
 
