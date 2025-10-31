@@ -22,6 +22,8 @@ namespace Amoba.Services
         public event EventHandler<string> NetworkErrorOccurred;
         public event EventHandler HostConnectionEstablished;
         public event EventHandler RematchReceived;
+        public event EventHandler OpponentLeft;
+        public event EventHandler LeaveAcknowledged;
 
         // --- Konstansok ---
         private const string MulticastGroupAddress = "239.255.42.99";
@@ -75,6 +77,7 @@ namespace Amoba.Services
                 throw;
             }
         }
+
         private async Task SendBroadcastMessage(string playerName)
         {
             if (_hostSocket == null || _multicastHostName == null) return;
@@ -92,6 +95,7 @@ namespace Amoba.Services
             }
             catch (Exception ex) { Debug.WriteLine($"Hiba az üzenetküldéskor: {ex.Message}"); }
         }
+
         public void StopHosting()
         {
             _broadcastTimer?.Dispose(); _broadcastTimer = null;
@@ -120,6 +124,7 @@ namespace Amoba.Services
                 NetworkErrorOccurred?.Invoke(this, $"Hiba a keresés indításakor: {ex.Message}.");
             }
         }
+
         public void StopDiscovering()
         {
             if (_listenerSocket != null)
@@ -129,6 +134,7 @@ namespace Amoba.Services
                 Debug.WriteLine("Keresés leállítva.");
             }
         }
+
         private void ListenerSocket_MessageReceived(DatagramSocket sender, DatagramSocketMessageReceivedEventArgs args)
         {
             try
@@ -178,6 +184,7 @@ namespace Amoba.Services
                 throw;
             }
         }
+
         private void TcpListener_ConnectionReceived(StreamSocketListener sender, StreamSocketListenerConnectionReceivedEventArgs args)
         {
             // Mivel a Kliens sikeresen csatlakozott, már nincs szükségünk
@@ -203,7 +210,7 @@ namespace Amoba.Services
         }
 
         // ===================================================================
-        // TCP KAPCSOLÓDÁS (JOINER) - JAVÍTVA
+        // TCP KAPCSOLÓDÁS (JOINER)
         // ===================================================================
         public async Task ConnectToGameAsync(string hostIpAddress)
         {
@@ -232,14 +239,13 @@ namespace Amoba.Services
         }
 
         // ===================================================================
-        // KOMMUNIKÁCIÓ ÉS LÉPÉSEK - JAVÍTVA
+        // KOMMUNIKÁCIÓ ÉS LÉPÉSEK
         // ===================================================================
         private async void StartReading()
         {
             _readCts = new CancellationTokenSource();
             try
             {
-                // JAVÍTÁS: Nincs 'using' blokk a _socketReader-en!
                 while (!_readCts.IsCancellationRequested)
                 {
                     uint size = await _socketReader.LoadAsync(sizeof(uint)).AsTask(_readCts.Token);
@@ -247,7 +253,6 @@ namespace Amoba.Services
 
                     uint messageLength = _socketReader.ReadUInt32();
                     uint actualMessageSize = await _socketReader.LoadAsync(messageLength).AsTask(_readCts.Token);
-
                     if (actualMessageSize == 0 && messageLength > 0) throw new Exception("Kapcsolat lezárva (üzenet olvasása közben).");
 
                     if (actualMessageSize == messageLength)
@@ -259,13 +264,24 @@ namespace Amoba.Services
             }
             catch (TaskCanceledException)
             {
+                // VÁRT VISELKEDÉS (Amikor mi magunk hívjuk a Disconnect()-et)
                 Debug.WriteLine("StartReading: Feladat szándékosan leállítva (Cancel).");
             }
-            catch (Exception ex) when (_readCts != null && !_readCts.IsCancellationRequested)
+            catch (Exception ex)
             {
-                Debug.WriteLine($"Olvasási hiba: {ex.Message}");
-                OpponentDisconnected?.Invoke(this, EventArgs.Empty);
-                Disconnect();
+                // Bármilyen más hiba (pl. "forcibly closed", ObjectDisposed)
+                // azt jelenti, hogy a kapcsolat megszakadt.
+
+                if (_readCts.IsCancellationRequested)
+                {
+                    Debug.WriteLine($"StartReading: Feladat szándékosan leállítva (Kivétel: {ex.GetType().Name}).");
+                }
+                else
+                {
+                    Debug.WriteLine($"Olvasási hiba (Váratlan): {ex.Message}");
+                    OpponentDisconnected?.Invoke(this, EventArgs.Empty);
+                    Disconnect();
+                }
             }
         }
 
@@ -292,6 +308,26 @@ namespace Amoba.Services
                 // Az ellenfél visszavágót kért.
                 RematchReceived?.Invoke(this, EventArgs.Empty);
             }
+            else if (message.StartsWith("LEAVE;"))
+            {
+                // A másik fél jelezte, hogy kilép (ő vár az ACK-ra).
+                OpponentLeft?.Invoke(this, EventArgs.Empty);
+
+                // DINAMIKUS VÁLASZ: Azonnal küldünk egy nyugtát ("LEAVE_ACK;")
+                Task.Run(async () => await SendLeaveAckAsync());
+            }
+            else if (message.StartsWith("LEAVE_ACK;"))
+            {
+                // A másik fél nyugtázta, hogy vette a kilépési szándékunkat.
+                LeaveAcknowledged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        public async Task SendLeaveGameAsync()
+        {
+            // A SendMessageAsync már kezeli a hibákat (ObjectDisposed, stb.)
+            await SendMessageAsync("LEAVE;");
+            Debug.WriteLine("[NETWORK SEND] Leave üzenet küldve.");
         }
 
         public async Task SendRematchRequestAsync()
@@ -352,6 +388,22 @@ namespace Amoba.Services
             }
         }
 
+        public async Task SendLeaveAckAsync()
+        {
+            // A SendMessageAsync már kezeli a hibákat (ObjectDisposed, stb.)
+            try
+            {
+                await SendMessageAsync("LEAVE_ACK;");
+                Debug.WriteLine("[NETWORK SEND] Leave ACK (nyugta) küldve.");
+            }
+            catch (Exception ex)
+            {
+                // Ha a nyugta küldése hibát dob, az már nem baj,
+                // mert a kapcsolat valószínűleg már bontva van.
+                Debug.WriteLine($"Hiba a 'Leave ACK' küldésekor: {ex.Message}");
+            }
+        }
+
         // ===================================================================
         // TAKARÍTÁS ÉS IP-Lekérdezés
         // ===================================================================
@@ -372,9 +424,10 @@ namespace Amoba.Services
             {
                 _gameSocket.Dispose();
                 _gameSocket = null;
-                System.Diagnostics.Debug.WriteLine("TCP kapcsolat megszakadt.");
+                Debug.WriteLine("TCP kapcsolat megszakadt.");
             }
         }
+
         public void Dispose()
         {
             StopHosting();
@@ -382,6 +435,7 @@ namespace Amoba.Services
             Disconnect();
             GC.SuppressFinalize(this);
         }
+
         private string GetLocalIpAddress()
         {
             var profile = NetworkInformation.GetInternetConnectionProfile();

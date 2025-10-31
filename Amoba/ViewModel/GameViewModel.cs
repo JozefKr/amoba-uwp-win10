@@ -32,6 +32,9 @@ namespace Amoba.ViewModel
         private string _gameOverMessage;
         private readonly IViewService _viewService; // A Főmenübe navigáláshoz
         private ContentDialog _activeGameOverDialog = null;
+        private readonly object _gameOverLock = new object();
+        // Ez fogja jelezni, ha megérkezett a LEAVE_ACK
+        private TaskCompletionSource<bool> _leaveAckTcs;
 
         // --- HÁLÓZATI MEZŐK ---
         private readonly INetworkService _networkService;
@@ -107,6 +110,8 @@ namespace Amoba.ViewModel
                 _networkService.MoveReceived += NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
                 _networkService.RematchReceived += NetworkService_RematchReceived; // VISSZAVÁGÓ FOGADÁSA
+                _networkService.OpponentLeft += NetworkService_OpponentLeft;
+                _networkService.LeaveAcknowledged += NetworkService_LeaveAcknowledged;
             }
 
             // 3. TÁBLA INICIALIZÁLÁSA
@@ -142,7 +147,7 @@ namespace Amoba.ViewModel
         // --- FŐ LOGIKAI METÓDUSOK ---
         // ===================================================================
 
-        // JAVÍTVA: Ez a "Visszavágó" gomb logikája
+        // Ez a "Visszavágó" gomb logikája
         private async void ExecuteNewGameAsync()
         {
             Player1Score = 0;
@@ -189,7 +194,6 @@ namespace Amoba.ViewModel
             }
         }
 
-        // JAVÍTVA: A metódus 'async Task<bool>' -t ad vissza
         private async Task<bool> ExecuteMove(Place place, IconType type)
         {
             if (place == null || !place.IsEmpty) return false;
@@ -279,16 +283,39 @@ namespace Amoba.ViewModel
         // --- HÁLÓZATI ESEMÉNYKEZELŐK ÉS TAKARÍTÁS ---
         // ===================================================================
 
-        // Ez csak a neveket és a köröket állítja be a játék elején
+        /// <summary>
+        /// Ez az eseménykezelő fut le, amikor a hálózati játék ténylegesen elindul.
+        /// Beállítja a szerepeket (Host/Kliens) és az ellenfél nevét.
+        /// </summary>
         private void NetworkService_GameStarted(object sender, GameStartedEventArgs e)
         {
+            // A CheckBeginInvokeOnUI egy háttérszálról hívódhat meg.
+            // A benne lévő kódnak "golyóállónak" kell lennie.
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                AmIHost = e.IsHost;
-                OpponentName = e.OpponentName;
-                IsPlayer1Turn = e.IsHost; // Host (X) kezd
-                IsPlayer2Turn = !e.IsHost;
-                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+                try
+                {
+                    // 1. Állapot frissítése (IsNetworkGame már true)
+                    AmIHost = e.IsHost; // Megerősíti a szerepkört
+                    OpponentName = e.OpponentName; // Beállítja a nevet
+
+                    // 2. KÖR BEÁLLÍTÁSA: A HOST KEZD!
+                    IsPlayer1Turn = e.IsHost; // Ha én vagyok a Host (X), én kezdek.
+                    IsPlayer2Turn = !e.IsHost; // Ha én vagyok a Kliens (O), az ellenfél (X) jön.
+
+                    // 3. CANEXECUTE FRISSÍTÉSE (Ez a kulcs!)
+                    // Frissítjük a gombok állapotát az új kör alapján.
+                    (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+                }
+                catch (Exception ex)
+                {
+                    // 4. HIBAKEZELÉS
+                    // Ha bármi hiba történik a játék indításakor
+                    // (pl. a CanExecute logikája hibát dob),
+                    // azt itt elkapjuk és kulturáltan leállítjuk a játékot.
+                    Debug.WriteLine($"FATALIS Hiba a NetworkService_GameStarted feldolgozása közben: {ex.Message}");
+                    HandleDisconnection("Kritikus hiba a játék indításakor.");
+                }
             });
         }
 
@@ -318,99 +345,319 @@ namespace Amoba.ViewModel
             }
         }
 
-        // Ez fogadja az ellenfél visszavágó kérését
+        /// <summary>
+        /// Akkor fut le, ha az ellenfél nyomta meg az "Új Játék" gombot.
+        /// Bezárja a helyi dialógust és alaphelyzetbe állítja a táblát.
+        /// </summary>
         private void NetworkService_RematchReceived(object sender, EventArgs e)
         {
+            // A DispatcherHelper.CheckBeginInvokeOnUI egy UI-szálra küldött "fire-and-forget" hívás.
+            // Bármilyen kivétel, ami a lambda-n belül történik, kezeletlen marad
+            // és összeomlasztja az alkalmazást. Ezért a teljes belső logikát
+            // try-catch blokkba kell tenni.
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                Debug.WriteLine("Visszavágó kérés fogadva, tábla törlése...");
-                Player1Score = 0;
-                Player2Score = 0;
-
-                // Mielőtt resetelünk, itt is be kell zárni a dialógust,
-                // ugyanúgy, ahogy a ResetBoard() tenné.
-                if (_activeGameOverDialog != null)
+                try
                 {
-                    _activeGameOverDialog.Hide();
-                    _activeGameOverDialog = null;
-                }
+                    Debug.WriteLine("Visszavágó kérés fogadva, tábla törlése...");
+                    Player1Score = 0;
+                    Player2Score = 0;
 
-                ResetBoard(); // Lefuttatja a helyi visszaállítást
+                    // 1. Dialógus bezárása
+                    // Bezárjuk a "Győzelem/Vereség" dialógust, hogy a tábla láthatóvá váljon.
+                    if (_activeGameOverDialog != null)
+                    {
+                        _activeGameOverDialog.Hide();
+                        _activeGameOverDialog = null;
+                    }
+
+                    // 2. Helyi visszaállítás
+                    // A ResetBoard() metódus (ami szintén a UI szálon fut)
+                    // elvégzi a tábla törlését és a körök visszaállítását P1-re.
+                    ResetBoard();
+                }
+                catch (Exception ex)
+                {
+                    // 3. Vészhelyzeti hibakezelés
+                    // Elkapja, ha pl. a .Hide() vagy a ResetBoard() hibát dob
+                    Debug.WriteLine($"FATALIS Hiba a RematchReceived feldolgozása közben: {ex.Message}");
+
+                    // Ha a reset meghiúsul, valami nagyon elromlott.
+                    // A legbiztonságosabb, ha visszaküldjük a felhasználót a főmenübe.
+                    GoToMainMenu();
+                }
             });
         }
 
+        // Ez oldja fel a várakozást a ShowGameOverDialogAsync-ban
+        private void NetworkService_LeaveAcknowledged(object sender, EventArgs e)
+        {
+            Debug.WriteLine("LEAVE_ACK nyugta fogadva.");
+            // Jelezzük a TaskCompletionSource-nak, hogy megérkezett a válasz
+            _leaveAckTcs?.TrySetResult(true);
+        }
+
+        // GameViewModel.cs
+
         private async void NetworkService_OpponentDisconnected(object sender, EventArgs e)
         {
-            // ZÁROLÁS ELLENŐRZÉSE ---
-            // Ha a játék már véget ért (pl. a ShowGameOverDialogAsync már fut),
-            // akkor már nem kell "Kapcsolat Megszakadt" üzenetet mutatni.
-            // A ShowGameOverDialog majd kezeli a Főmenübe lépést.
-            if (IsGameOver) return;
-            IsGameOver = true; // "ZÁROLJUK"
+            // Ez az esemény a "VÁRATLAN" leállás (pl. "forcibly closed").
+            // Ennek a logikának felül kell írnia a normál játék végét.
 
             await DispatcherHelper.RunAsync(async () =>
             {
-                var dialog = new ContentDialog
+                // ZÁROLJUK, hogy más (pl. a ShowGameOverDialog) ne fusson le
+                lock (_gameOverLock)
                 {
-                    Title = "Kapcsolat Megszakadt",
-                    Content = $"Az ellenfél ({OpponentName}) kilépett a játékból.",
-                    PrimaryButtonText = "Főmenü" // 14393 kompatibilis
-                };
-                await dialog.ShowAsync();
-                GoToMainMenu();
+                    if (IsGameOver) return;
+                    IsGameOver = true;
+                }
+
+                try
+                {
+                    Debug.WriteLine("VÁRATLAN kapcsolatbontás (OpponentDisconnected). Dialógusok bezárása és Főmenü.");
+
+                    // BEZÁRJUK a "Visszavágó/Főmenü" dialógust, ha az nyitva volt
+                    // Ez akadályozta meg a 'GoToMainMenu'-t a korábbi logikában.
+                    if (_activeGameOverDialog != null)
+                    {
+                        Debug.WriteLine("Aktív 'Game Over' dialógus bezárása...");
+                        _activeGameOverDialog.Hide();
+                        _activeGameOverDialog = null;
+                    }
+
+                    //  Mutatunk egy "Kapcsolat megszakadt" dialógust
+                    var dialog = new ContentDialog
+                    {
+                        Title = "Kapcsolat Megszakadt",
+                        Content = $"Az ellenfél ({OpponentName}) váratlanul bontotta a kapcsolatot.",
+                        PrimaryButtonText = "OK (Főmenü)"
+                    };
+                    await dialog.ShowAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Elkapja, ha a .Hide() vagy .ShowAsync() hibát dob
+                    Debug.WriteLine($"Hiba a 'OpponentDisconnected' dialógus megjelenítésekor: {ex.Message}");
+                }
+                finally
+                {
+                    // 5. NAVIGÁLUNK A FŐMENÜBE
+                    // Akár sikeres volt a dialógus, akár nem, a játék véget ért.
+                    GoToMainMenu();
+                }
+            });
+        }
+
+        /// <summary>
+        /// Akkor fut le, ha az ellenfél nyomta meg a "Főmenü" gombot.
+        /// </summary>
+        private async void NetworkService_OpponentLeft(object sender, EventArgs e)
+        {
+            // 2. VÁLTÁS A UI SZÁLRA
+            await DispatcherHelper.RunAsync(async () =>
+            {
+                // A zárolás logikája megváltozott.
+                // Nem 'return'-ölünk, ha 'IsGameOver' true, hanem
+                // csak beállítjuk, hogy biztosan 'true' legyen.
+                lock (_gameOverLock)
+                {
+                    if (IsGameOver)
+                    {
+                        // A 'ShowGameOverDialog' már fut, ez rendben van.
+                        // A feladatunk, hogy bezárjuk azt a dialógust.
+                    }
+                    else
+                    {
+                        // Ha a játék még futott (nem volt dialógus), most zároljuk.
+                        IsGameOver = true;
+                    }
+                }
+                Debug.WriteLine("Ellenfél 'Főmenübe lépés' kérés fogadva (OpponentLeft).");
+
+                try
+                {
+                    // 3. MEGLÉVŐ DIALÓGUS BEZÁRÁSA
+                    // Ha a "Visszavágó/Főmenü" dialógus nyitva volt, bezárjuk.
+                    if (_activeGameOverDialog != null)
+                    {
+                        _activeGameOverDialog.Hide();
+                        _activeGameOverDialog = null;
+                    }
+
+                    // 4. ÚJ, TÁJÉKOZTATÓ DIALÓGUS MEGJELENÍTÉSE
+                    // (Ez a lépés opcionális, de jobb UX, mint a csendes kilépés)
+                    var dialog = new ContentDialog
+                    {
+                        Title = "Játék Vége",
+                        Content = "Az ellenfél kilépett a főmenübe.",
+                        PrimaryButtonText = "OK (Főmenü)"
+                    };
+
+                    // 5. A dialógus megjelenítése (ez dobhat kivételt)
+                    await dialog.ShowAsync();
+                }
+                catch (Exception ex)
+                {
+                    // 6. HIBAKEZELÉS
+                    // Elkapja, ha a .Hide() vagy .ShowAsync() hibát dob
+                    Debug.WriteLine($"Hiba a 'NetworkService_OpponentLeft' dialógus kezelésekor: {ex.Message}");
+                    // A hiba ellenére is a főmenübe kell lépnünk.
+                }
+                finally
+                {
+                    // 7. NAVIGÁCIÓ A FŐMENÜBE
+                    // Akár sikeres volt a dialógus, akár nem, a játék véget ért.
+                    GoToMainMenu();
+                }
             });
         }
 
         // Ez a felugró ablak a játék végén
         private async Task ShowGameOverDialogAsync(string title, string message)
         {
-            if (IsGameOver) return; // Ne mutassuk kétszer (ha mindkét gép egyszerre észleli)
-            IsGameOver = true;
-
             await DispatcherHelper.RunAsync(async () =>
             {
-                _activeGameOverDialog = new ContentDialog
-                {
-                    Title = title,
-                    Content = message,
-                    PrimaryButtonText = "Visszavágó",
-                    SecondaryButtonText = "Főmenü",
-                };
+                bool navigateToMenu = false; // Jelző, hogy a főmenübe kell-e lépni
 
-                var result = await _activeGameOverDialog.ShowAsync();
-                _activeGameOverDialog = null; // Töröljük a referenciát, miután bezárult
+                lock (_gameOverLock)
+                {
+                    if (IsGameOver) return;
+                    IsGameOver = true;
+                }
 
-                if (result == ContentDialogResult.Primary)
+                try
                 {
-                    ExecuteNewGameAsync(); // "Visszavágó"
+                    _activeGameOverDialog = new ContentDialog
+                    {
+                        Title = title,
+                        Content = message,
+                        PrimaryButtonText = "Visszavágó",
+                        SecondaryButtonText = "Főmenü",
+                    };
+
+                    var result = await _activeGameOverDialog.ShowAsync();
+                    _activeGameOverDialog = null;
+
+                    if (result == ContentDialogResult.Primary)
+                    {
+                        // "VISSZAVÁGÓ"
+                        ExecuteNewGameAsync();
+                    }
+                    else if (result == ContentDialogResult.Secondary)
+                    {
+                        // "FŐMENÜ"
+                        navigateToMenu = true; // Jelezzük, hogy a főmenübe akarunk lépni
+
+                        // 5. TISZTA KILÉPÉSI ÜZENET KÜLDÉSE
+                        if (IsNetworkGame && _networkService != null)
+                        {
+                            try
+                            {
+                                // 1. Létrehozunk egy "jelzőt", amire várunk
+                                _leaveAckTcs = new TaskCompletionSource<bool>();
+
+                                // 2. Elküldjük a LEAVE üzenetet
+                                Debug.WriteLine("ShowGameOver: LEAVE üzenet küldése...");
+                                await _networkService.SendLeaveGameAsync();
+
+                                // 3. Várunk az ACK-ra (LeaveAcknowledged esemény)
+                                // VAGY várunk max 2 másodpercet (timeout)
+                                Debug.WriteLine("ShowGameOver: Várakozás a LEAVE_ACK nyugtára (max 2s)...");
+                                await Task.WhenAny(_leaveAckTcs.Task, Task.Delay(2000));
+
+                                if (_leaveAckTcs.Task.IsCompleted)
+                                    Debug.WriteLine("ShowGameOver: LEAVE_ACK megérkezett!");
+                                else
+                                    Debug.WriteLine("ShowGameOver: LEAVE_ACK időtúllépés!");
+                            }
+                            catch (Exception ex)
+                            {
+                                // Ez nem baj, valószínűleg a másik fél már bontotta a kapcsolatot.
+                                Debug.WriteLine($"Hiba a 'Leave' küldésekor (elkapva): {ex.Message}");
+                            }
+                        }
+                    }
+                    // Ha a result == ContentDialogResult.None (mert Hide() zárta be)
+                    // akkor nem csinálunk semmit.
                 }
-                else if (result == ContentDialogResult.Secondary)
+                catch (Exception ex)
                 {
-                    // A FELHASZNÁLÓ nyomott "Főmenü"-t
-                    GoToMainMenu();
+                    // 7. ÁLTALÁNOS HIBAKEZELÉS (ha a ShowAsync hibát dob)
+                    Debug.WriteLine($"FATALIS Hiba a ShowGameOverDialogAsync-ban: {ex.Message}");
+                    // Hiba esetén is a főmenü a biztonságos állapot
+                    navigateToMenu = true;
                 }
-                // Ha a result == ContentDialogResult.None (mert Hide() zárta be),
-                // akkor NEM CSINÁLUNK SEMMIT, mert a ResetBoard már lefutott.
+                finally
+                {
+                    // 8. VÉGREHAJTÁS
+                    // Ez a blokk garantálja, hogy a navigáció CSAK a hálózati
+                    // műveletek (vagy hibák) UTÁN történik meg.
+                    if (navigateToMenu)
+                    {
+                        GoToMainMenu(); // TAKARÍTÁS ÉS NAVIGÁLÁS
+                    }
+                }
             });
         }
 
+        /// <summary>
+        /// Leállítja a hálózatot és visszanavigál a főmenübe.
+        /// </summary>
         private void GoToMainMenu()
         {
-            Cleanup(); // Leállítja a hálózatot
-            // Főoldalra navigálás
+            // A Cleanup() gondoskodik a Disconnect-ről és a leiratkozásokról
+            Cleanup();
+
+            // Visszanavigálunk a főoldalra
             _viewService?.OpenPage<MainViewModel>();
         }
 
-        // Segédmetódus a váratlan leállás kezelésére
+        // GameViewModel.cs
+
+        /// <summary>
+        /// Segédmetódus a váratlan hálózati leállás (pl. küldési hiba) egységes kezelésére.
+        /// Zárolja a játékot és visszanavigál a főmenübe.
+        /// </summary>
         private void HandleDisconnection(string message)
         {
+            // 2. VÁLTÁS A UI SZÁLRA
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                if (IsGameOver) return;
-                IsGameOver = true;
-                GameOverMessage = message;
-                _networkService.Disconnect();
-                (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
+                // 1. ATOMIKUS ZÁROLÁS
+                // Megakadályozza a ShowGameOverDialogAsync-val (játék vége) való versenyhelyzetet.
+                lock (_gameOverLock)
+                {
+                    if (IsGameOver) return; // Egy másik dialógus (játék vége) már aktív.
+                    IsGameOver = true;      // Zároljuk.
+                }
+
+                // Ez a "végső mentsvár". Ha a GoToMainMenu() hibát dob
+                // (pl. a ViewService null, vagy a Cleanup hibázik),
+                // az alkalmazás legalább nem omlik össze kezeletlen kivétel miatt.
+                try
+                {
+                    Debug.WriteLine($"HandleDisconnection fut (Hiba: {message}). Navigálás a Főmenübe.");
+
+                    // Bezárjuk az esetleg nyitva maradt "Visszavágó" dialógust
+                    if (_activeGameOverDialog != null)
+                    {
+                        _activeGameOverDialog.Hide();
+                        _activeGameOverDialog = null;
+                    }
+
+                    // Mivel ez egy váratlan hiba (nem kulturált kilépés),
+                    // azonnal a főmenübe lépünk.
+                    GoToMainMenu(); // Ez hívja a Cleanup()-ot és a Disconnect()-et
+                }
+                catch (Exception ex)
+                {
+                    // Ha még a főmenübe navigálás is hibát dob,
+                    // akkor már csak naplózni tudjuk a végzetes hibát.
+                    Debug.WriteLine($"FATALIS Hiba a HandleDisconnection végrehajtása közben: {ex.Message}");
+                    // Ezen a ponton az alkalmazás valószínűleg instabil állapotban van,
+                    // de legalább nem omlott össze a Dispatcher-en belül.
+                }
             });
         }
 
@@ -421,14 +668,23 @@ namespace Amoba.ViewModel
             {
                 DispatcherHelper.CheckBeginInvokeOnUI(() =>
                 {
+                    // 1. DIALÓGUS BEZÁRÁSA (Kritikus a versenyhelyzet elkerüléséhez)
+                    if (_activeGameOverDialog != null)
+                    {
+                        _activeGameOverDialog.Hide();
+                        _activeGameOverDialog = null;
+                    }
+
+                    // 2. TÁBLA TÖRLÉSE
                     foreach (var place in Places) { place.Type = IconType.None; }
 
-                    // A köröket mindig P1-re állítjuk vissza ---
-                    // Hálózati módban a CanExecute (AmIHost) kezeli a tiltást.
+                    // 3. KÖRÖK VISSZAÁLLÍTÁSA (Mindig P1/Host kezd)
                     IsPlayer1Turn = true;
                     IsPlayer2Turn = false;
                     isComputerTurn = false;
                     isProcessingAiMove = false;
+
+                    // 4. ZÁROLÁS FELOLDÁSA
                     IsGameOver = false;
 
                     (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
@@ -449,6 +705,8 @@ namespace Amoba.ViewModel
                 _networkService.MoveReceived -= NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
                 _networkService.RematchReceived -= NetworkService_RematchReceived;
+                _networkService.OpponentLeft -= NetworkService_OpponentLeft;
+                _networkService.LeaveAcknowledged -= NetworkService_LeaveAcknowledged;
 
                 _networkService.Disconnect();
             }

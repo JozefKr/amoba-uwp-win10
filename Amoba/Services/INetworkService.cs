@@ -17,6 +17,11 @@ namespace Amoba.Services
         event EventHandler<int> MoveReceived; // Lépés érkezett
 
         /// <summary>
+        /// Akkor aktiválódik, ha az ellenfél a Főmenübe lépett (szándékos kilépés).
+        /// </summary>
+        event EventHandler OpponentLeft;
+
+        /// <summary>
         /// Akkor aktiválódik, ha az ellenfél visszavágót kért (megnyomta az Új Játék gombot).
         /// </summary>
         event EventHandler RematchReceived;
@@ -32,6 +37,11 @@ namespace Amoba.Services
         /// (a Host elküldte a méretet a START paranccsal).
         /// </summary>
         event EventHandler<GameStartedEventArgs> GameStarted;
+
+        /// <summary>
+        /// Akkor aktiválódik, ha az ellenfél nyugtázta a kilépési szándékot.
+        /// </summary>
+        event EventHandler LeaveAcknowledged;
 
 
         // --- Metódusok ---
@@ -66,8 +76,18 @@ namespace Amoba.Services
         Task SendRematchRequestAsync();
 
         /// <summary>
+        /// Elküldi az ellenfélnek, hogy a Főmenübe lépünk.
+        /// </summary>
+        Task SendLeaveGameAsync();
+
+        /// <summary>
         /// Lezár minden aktív UDP és TCP kapcsolatot/listenert.
         /// </summary>
         void Disconnect();
+
+        /// <summary>
+        /// Elküldi a "Leave" üzenet nyugtázását. (Csak Kliens hívja)
+        /// </summary>
+        Task SendLeaveAckAsync();
     }
 }
