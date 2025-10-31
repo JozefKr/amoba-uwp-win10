@@ -2,6 +2,7 @@
 using Amoba.Services;
 using GalaSoft.MvvmLight;
 using GalaSoft.MvvmLight.Command;
+using GalaSoft.MvvmLight.Messaging;
 using GalaSoft.MvvmLight.Threading;
 using System;
 using System.Collections.ObjectModel;
@@ -11,6 +12,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls; // Szükséges a ContentDialog-hoz
+using Amoba.Messages;
 
 namespace Amoba.ViewModel
 {
@@ -254,6 +256,11 @@ namespace Amoba.ViewModel
             {
                 if (place == null || !place.IsEmpty) return;
                 IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
+
+                // =======================================================
+                // HANG LEJÁTSZÁSA (KATTINTÁS)
+                // =======================================================
+                Messenger.Default.Send(new PlaySoundMessage { SoundName = "Click" });
 
                 // A ChangeTurn() hívása az ExecuteMove-ból kikerült
                 bool gameIsOver = await ExecuteMove(place, iconToUse);
@@ -533,6 +540,19 @@ namespace Amoba.ViewModel
         /// </summary>
         private void TriggerGameOver(string title, string message)
         {
+            // =======================================================
+            // HANG LEJÁTSZÁSA (GYŐZELEM/VERESÉG)
+            // =======================================================
+            if (title == "Győzelem!")
+            {
+                Messenger.Default.Send(new PlaySoundMessage { SoundName = "Win" });
+            }
+            else if (title == "Vereség!")
+            {
+                Messenger.Default.Send(new PlaySoundMessage { SoundName = "Lose" });
+            }
+            // (Döntetlennél nem játszunk hangot, hacsak nem adsz hozzá egy "Draw" esetet)
+
             // UI szálra váltunk
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {

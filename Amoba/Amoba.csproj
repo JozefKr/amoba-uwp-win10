@@ -124,6 +124,7 @@
     <Compile Include="Converters\InverseBooleanToVisibilityConverter.cs" />
     <Compile Include="Converters\PlacesToDimensionsConverter.cs" />
     <Compile Include="Converters\TurnToColorConverter.cs" />
+    <Compile Include="Messages\PlaySoundMessage.cs" />
     <Compile Include="Model\GameType.cs" />
     <Compile Include="Model\IconType.cs" />
     <Compile Include="Model\Place.cs" />
@@ -176,6 +177,9 @@
     <Content Include="Assets\SmallTile.scale-150.png" />
     <Content Include="Assets\SmallTile.scale-200.png" />
     <Content Include="Assets\SmallTile.scale-400.png" />
+    <Content Include="Assets\Sounds\click.mp3" />
+    <Content Include="Assets\Sounds\lose.mp3" />
+    <Content Include="Assets\Sounds\win.mp3" />
     <Content Include="Assets\SplashScreen.scale-100.png" />
     <Content Include="Assets\SplashScreen.scale-125.png" />
     <Content Include="Assets\SplashScreen.scale-150.png" />

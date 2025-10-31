@@ -196,5 +196,10 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Viewbox>
+        <StackPanel Height="0" Opacity="0">
+            <MediaElement x:Name="ClickSound" Source="ms-appx:///Assets/Sounds/click.mp3" AutoPlay="False" />
+            <MediaElement x:Name="WinSound" Source="ms-appx:///Assets/Sounds/win.mp3" AutoPlay="False" />
+            <MediaElement x:Name="LoseSound" Source="ms-appx:///Assets/Sounds/lose.mp3" AutoPlay="False" />
+        </StackPanel>
     </Grid>
 </local:BasePage>

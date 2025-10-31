@@ -1,9 +1,13 @@
-﻿using System;
+﻿using Amoba.Messages;
+using GalaSoft.MvvmLight.Messaging;
+using GalaSoft.MvvmLight.Threading;
+using System;
 using System.Diagnostics;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media; // Ez kell a VisualTreeHelper-hez
 using Windows.UI.Xaml.Media.Animation; // Ez kell a Storyboard-hoz
+using Windows.UI.Xaml.Navigation;
 
 namespace Amoba.Views
 {
@@ -12,6 +16,35 @@ namespace Amoba.Views
         public GamePage()
         {
             this.InitializeComponent();
+
+            // =======================================================
+            // 1. FELIRATKOZÁS AZ ÜZENETRE
+            // Amikor ez az oldal létrejön, el kezd figyelni a hang-üzenetekre.
+            // =======================================================
+            Messenger.Default.Register<PlaySoundMessage>(this, OnPlaySoundMessage);
+        }
+
+        /// <summary>
+        /// Ez a metódus hívódik meg, amikor a ViewModel hangot akar lejátszani.
+        /// </summary>
+        private void OnPlaySoundMessage(PlaySoundMessage message)
+        {
+            // A biztonság kedvéért UI szálon futtatjuk
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                switch (message.SoundName)
+                {
+                    case "Click":
+                        ClickSound.Play();
+                        break;
+                    case "Win":
+                        WinSound.Play();
+                        break;
+                    case "Lose":
+                        LoseSound.Play();
+                        break;
+                }
+            });
         }
 
         /// <summary>
@@ -71,6 +104,16 @@ namespace Amoba.Views
                 // de a 'storyboard.Stop()' hívás megakadályozza a fő összeomlást.
                 Debug.WriteLine($"Animációs hiba (SizeChanged): {ex.Message}");
             }
+        }
+
+        // =======================================================
+        // 2. LEIRATKOZÁS (Kritikus!)
+        // Amikor elnavigálunk erről az oldalról, le kell iratkozni.
+        // =======================================================
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            base.OnNavigatedFrom(e);
+            Messenger.Default.Unregister<PlaySoundMessage>(this);
         }
     }
 }
