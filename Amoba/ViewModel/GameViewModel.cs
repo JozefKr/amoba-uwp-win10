@@ -208,14 +208,11 @@ namespace Amoba.ViewModel
                 }
                 catch (Exception ex)
                 {
-                    // Ha a küldés hibát dob (pl. a másik már bontott),
-                    // az nem baj, a HandleDisconnection kezeli a navigációt.
-                    Debug.WriteLine($"Hiba a 'Leave' küldésekor (elkapva): {ex.Message}");
-                    HandleDisconnection("Hiba a kilépés jelzésekor.");
-
-                    // Fontos: Mivel a HandleDisconnection már navigál,
-                    // itt kilépünk, hogy ne hívjuk a GoToMainMenu-t kétszer.
-                    return;
+                    // Ha a kulturált kilépés (LEAVE küldése) hibát dob, az NEM VÁRATLAN HIBA.
+                    // A szándékunk továbbra is a Főmenübe lépés.
+                    // Egyszerűen naplózzuk a hibát, és hagyjuk, hogy a kód
+                    // tovább fusson a 'GoToMainMenu()' hívásra.
+                    Debug.WriteLine($"Hiba a 'Leave' küldésekor (elkapva, de figyelmen kívül hagyva): {ex.Message}");
                 }
             }
 
@@ -449,129 +446,33 @@ namespace Amoba.ViewModel
             _leaveAckTcs?.TrySetResult(true);
         }
 
-        // GameViewModel.cs
-
-        private async void NetworkService_OpponentDisconnected(object sender, EventArgs e)
+        /// <summary>
+        /// Akkor fut le, ha a kapcsolat VÁRATLANUL megszakad (FOGADÁSI hiba).
+        /// </summary>
+        private void NetworkService_OpponentDisconnected(object sender, EventArgs e)
         {
-            // Ez az esemény a "VÁRATLAN" leállás (pl. "forcibly closed").
-            // Ennek a logikának felül kell írnia a normál játék végét.
-
-            await DispatcherHelper.RunAsync(async () =>
-            {
-                // ZÁROLJUK, hogy más (pl. a ShowGameOverDialog) ne fusson le
-                lock (_gameOverLock)
-                {
-                    if (IsGameOver)
-                    {
-                        // A játék már véget ért (dialógus látszik),
-                        // de a kapcsolat váratlanul megszakadt.
-                        // Nem lépünk ki, csak jelezzük, hogy a zárolás már aktív.
-                    }
-                    else
-                    {
-                        // A játék még futott, most zároljuk.
-                        IsGameOver = true;
-                    }
-                }
-
-                try
-                {
-                    Debug.WriteLine("VÁRATLAN kapcsolatbontás (OpponentDisconnected). Dialógusok bezárása és Főmenü.");
-
-                    // BEZÁRJUK a "Visszavágó/Főmenü" dialógust, ha az nyitva volt
-                    // Ez akadályozta meg a 'GoToMainMenu'-t a korábbi logikában.
-                    if (_activeGameOverDialog != null)
-                    {
-                        Debug.WriteLine("Aktív 'Game Over' dialógus bezárása...");
-                        _activeGameOverDialog.Hide();
-                        _activeGameOverDialog = null;
-                    }
-
-                    //  Mutatunk egy "Kapcsolat megszakadt" dialógust
-                    var dialog = new ContentDialog
-                    {
-                        Title = "Kapcsolat Megszakadt",
-                        Content = $"Az ellenfél ({OpponentName}) váratlanul bontotta a kapcsolatot.",
-                        PrimaryButtonText = "OK (Főmenü)"
-                    };
-                    await dialog.ShowAsync();
-                }
-                catch (Exception ex)
-                {
-                    // Elkapja, ha a .Hide() vagy .ShowAsync() hibát dob
-                    Debug.WriteLine($"Hiba a 'OpponentDisconnected' dialógus megjelenítésekor: {ex.Message}");
-                }
-                finally
-                {
-                    // 5. NAVIGÁLUNK A FŐMENÜBE
-                    // Akár sikeres volt a dialógus, akár nem, a játék véget ért.
-                    GoToMainMenu();
-                }
-            });
+            // Ez egy VÁRATLAN hiba (a kapcsolat váratlanul lezárult).
+            // Mutatunk egy felugró ablakot.
+            Debug.WriteLine("VÁRATLAN kapcsolatbontás (OpponentDisconnected).");
+            ShowDisconnectionErrorAsync("Kapcsolat Megszakadt", $"Az ellenfél ({OpponentName}) váratlanul bontotta a kapcsolatot.");
         }
 
         /// <summary>
-        /// Akkor fut le, ha az ellenfél nyomta meg a "Főmenü" gombot.
+        /// Akkor fut le, ha az ellenfél nyomta meg a "Főmenü" gombot (kulturált kilépés).
         /// </summary>
-        private async void NetworkService_OpponentLeft(object sender, EventArgs e)
+        private void NetworkService_OpponentLeft(object sender, EventArgs e)
         {
-            // 2. VÁLTÁS A UI SZÁLRA
-            await DispatcherHelper.RunAsync(async () =>
-            {
-                // A zárolás logikája megváltozott.
-                // Nem 'return'-ölünk, ha 'IsGameOver' true, hanem
-                // csak beállítjuk, hogy biztosan 'true' legyen.
-                lock (_gameOverLock)
-                {
-                    if (IsGameOver)
-                    {
-                        // A 'ShowGameOverDialog' már fut, ez rendben van.
-                        // A feladatunk, hogy bezárjuk azt a dialógust.
-                    }
-                    else
-                    {
-                        // Ha a játék még futott (nem volt dialógus), most zároljuk.
-                        IsGameOver = true;
-                    }
-                }
-                Debug.WriteLine("Ellenfél 'Főmenübe lépés' kérés fogadva (OpponentLeft).");
+            // Ez egy kulturált kilépés, de a felhasználót (aki nem kezdeményezte)
+            // tájékoztatni kell róla.
+            // A 'ShowDisconnectionErrorAsync' metódusunk tökéletes erre:
+            // 1. Megjelenít egy dialógust (ez adja a "késleltetést").
+            // 2. Az 'await' (várakozás) alatt a NetworkService el tudja küldeni a 'LEAVE_ACK'-ot.
+            // 3. A 'finally' blokkja kezeli a 'GoToMainMenu'-t, miután a felhasználó "OK"-t nyomott.
 
-                try
-                {
-                    // 3. MEGLÉVŐ DIALÓGUS BEZÁRÁSA
-                    // Ha a "Visszavágó/Főmenü" dialógus nyitva volt, bezárjuk.
-                    if (_activeGameOverDialog != null)
-                    {
-                        _activeGameOverDialog.Hide();
-                        _activeGameOverDialog = null;
-                    }
+            Debug.WriteLine("Ellenfél 'Főmenübe lépés' kérés fogadva (OpponentLeft). Dialógus megjelenítése...");
 
-                    // 4. ÚJ, TÁJÉKOZTATÓ DIALÓGUS MEGJELENÍTÉSE
-                    // (Ez a lépés opcionális, de jobb UX, mint a csendes kilépés)
-                    var dialog = new ContentDialog
-                    {
-                        Title = "Játék Vége",
-                        Content = "Az ellenfél kilépett a főmenübe.",
-                        PrimaryButtonText = "OK (Főmenü)"
-                    };
-
-                    // 5. A dialógus megjelenítése (ez dobhat kivételt)
-                    await dialog.ShowAsync();
-                }
-                catch (Exception ex)
-                {
-                    // 6. HIBAKEZELÉS
-                    // Elkapja, ha a .Hide() vagy .ShowAsync() hibát dob
-                    Debug.WriteLine($"Hiba a 'NetworkService_OpponentLeft' dialógus kezelésekor: {ex.Message}");
-                    // A hiba ellenére is a főmenübe kell lépnünk.
-                }
-                finally
-                {
-                    // 7. NAVIGÁCIÓ A FŐMENÜBE
-                    // Akár sikeres volt a dialógus, akár nem, a játék véget ért.
-                    GoToMainMenu();
-                }
-            });
+            // Nem "Hiba"-ként, hanem "Tájékoztatásként" hívjuk.
+            ShowDisconnectionErrorAsync("Játék Vége", "Az ellenfél kilépett a főmenübe.");
         }
 
         /// Beállítja a Játék Vége állapotot és a győzelmi üzenetet.
@@ -653,62 +554,71 @@ namespace Amoba.ViewModel
             });
         }
 
-        // GameViewModel.cs
-
         /// <summary>
-        /// Segédmetódus a váratlan hálózati leállás (pl. küldési hiba) egységes kezelésére.
-        /// Zárolja a játékot és visszanavigál a főmenübe.
+        /// Segédmetódus, ami VÁRATLAN hiba esetén felugró ablakot mutat,
+        /// majd utána biztonságosan a Főmenübe navigál.
         /// </summary>
-        private void HandleDisconnection(string message)
+        private async void ShowDisconnectionErrorAsync(string title, string content)
         {
-            // 2. VÁLTÁS A UI SZÁLRA
-            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            await DispatcherHelper.RunAsync(async () =>
             {
-                // 1. ATOMIKUS ZÁROLÁS
-                // Megakadályozza a ShowGameOverDialogAsync-val (játék vége) való versenyhelyzetet.
+                // 1. Zárolás
                 lock (_gameOverLock)
                 {
-                    if (IsGameOver)
-                    {
-                        // A játék már véget ért (a "Game Over" panel látszik),
-                        // de közben hálózati hiba történt (pl. lépésküldéskor).
-                        // Nem lépünk ki, hagyjuk, hogy a GoToMainMenu() lefusson.
-                        Debug.WriteLine("HandleDisconnection: IsGameOver már 'true' volt.");
-                    }
-                    else
-                    {
-                        // A játék még futott, most zároljuk.
-                        IsGameOver = true;
-                    }
+                    // Ha a navigáció már elindult (pl. egy másik hiba miatt),
+                    // akkor ne mutassunk még egy dialógust.
+                    if (_isNavigatingToMenu) return;
+
+                    // Ha a játék még futott, zároljuk.
+                    IsGameOver = true;
+
+                    // FONTOS: A _isNavigatingToMenu zárat NEM itt állítjuk be,
+                    // hanem a GoToMainMenu-re bízzuk, MIUTÁN a dialógus bezárult.
                 }
 
-                // Ez a "végső mentsvár". Ha a GoToMainMenu() hibát dob
-                // (pl. a ViewService null, vagy a Cleanup hibázik),
-                // az alkalmazás legalább nem omlik össze kezeletlen kivétel miatt.
+                Debug.WriteLine($"VÁRATLAN kapcsolatbontás: {content}");
+
                 try
                 {
-                    Debug.WriteLine($"HandleDisconnection fut (Hiba: {message}). Navigálás a Főmenübe.");
-
-                    // Bezárjuk az esetleg nyitva maradt "Visszavágó" dialógust
+                    // 2. Esetlegesen nyitva lévő (régi) dialógus bezárása
                     if (_activeGameOverDialog != null)
                     {
                         _activeGameOverDialog.Hide();
                         _activeGameOverDialog = null;
                     }
 
-                    // Mivel ez egy váratlan hiba (nem kulturált kilépés),
-                    // azonnal a főmenübe lépünk.
-                    GoToMainMenu(); // Ez hívja a Cleanup()-ot és a Disconnect()-et
+                    // 3. HIBAÜZENET MEGJELENÍTÉSE
+                    var dialog = new ContentDialog
+                    {
+                        Title = title,
+                        Content = content,
+                        PrimaryButtonText = "OK (Főmenü)"
+                    };
+                    await dialog.ShowAsync(); // Várjuk meg, amíg a felhasználó le-OK-zza
                 }
                 catch (Exception ex)
                 {
-                    // Ha még a főmenübe navigálás is hibát dob,
-                    // akkor már csak naplózni tudjuk a végzetes hibát.
-                    Debug.WriteLine($"FATALIS Hiba a HandleDisconnection végrehajtása közben: {ex.Message}");
-                    // Ezen a ponton az alkalmazás valószínűleg instabil állapotban van,
-                    // de legalább nem omlott össze a Dispatcher-en belül.
+                    Debug.WriteLine($"Hiba a 'Disconnection' dialógus megjelenítésekor: {ex.Message}");
+                }
+                finally
+                {
+                    // 4. NAVIGÁLÁS A FŐMENÜBE
+                    // Miután a felhasználó le-OK-zta, a GoToMainMenu-re bízzuk
+                    // a tiszta navigációt, zárolást és takarítást.
+                    GoToMainMenu();
                 }
             });
+        }
+
+        /// <summary>
+        /// Segédmetódus a váratlan hálózati leállás (pl. KÜLDÉSI hiba) kezelésére.
+        /// </summary>
+        private void HandleDisconnection(string message)
+        {
+            // Ez egy VÁRATLAN hiba (pl. küldés meghiúsult).
+            // Mutatunk egy felugró ablakot.
+            Debug.WriteLine($"HandleDisconnection fut (Hiba: {message}).");
+            ShowDisconnectionErrorAsync("Hálózati Hiba", $"A művelet nem sikerült. A kapcsolat megszakadt.");
         }
 
         /// <summary>
