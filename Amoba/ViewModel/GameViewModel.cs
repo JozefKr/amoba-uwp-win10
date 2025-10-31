@@ -179,7 +179,7 @@ namespace Amoba.ViewModel
                 if (place == null || !place.IsEmpty) return;
                 IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
 
-                // JAVÍTVA: A ChangeTurn() hívása az ExecuteMove-ból kikerült
+                // A ChangeTurn() hívása az ExecuteMove-ból kikerült
                 bool gameIsOver = await ExecuteMove(place, iconToUse);
 
                 if (!gameIsOver) // Csak akkor váltunk kört, ha a játék NEM ért véget
@@ -409,8 +409,17 @@ namespace Amoba.ViewModel
                 // ZÁROLJUK, hogy más (pl. a ShowGameOverDialog) ne fusson le
                 lock (_gameOverLock)
                 {
-                    if (IsGameOver) return;
-                    IsGameOver = true;
+                    if (IsGameOver)
+                    {
+                        // A játék már véget ért (dialógus látszik),
+                        // de a kapcsolat váratlanul megszakadt.
+                        // Nem lépünk ki, csak jelezzük, hogy a zárolás már aktív.
+                    }
+                    else
+                    {
+                        // A játék még futott, most zároljuk.
+                        IsGameOver = true;
+                    }
                 }
 
                 try
@@ -573,8 +582,14 @@ namespace Amoba.ViewModel
                             }
                             catch (Exception ex)
                             {
-                                // Ez nem baj, valószínűleg a másik fél már bontotta a kapcsolatot.
-                                Debug.WriteLine($"Hiba a 'Leave' küldésekor (elkapva): {ex.Message}");
+                                // Ez fogja biztosítani, hogy a 'finally' blokk ne fusson le
+                                // (mert a HandleDisconnection már elnavigál).
+                                // VAGY ha mégis lefut, a Cleanup már megtörtént.
+                                HandleDisconnection("Hiba a kilépés jelzésekor.");
+
+                                // Fontos: Mivel a HandleDisconnection már elnavigál,
+                                // megakadályozzuk, hogy a 'finally' blokk is megpróbálja.
+                                navigateToMenu = false;
                             }
                         }
                     }
@@ -585,8 +600,16 @@ namespace Amoba.ViewModel
                 {
                     // 7. ÁLTALÁNOS HIBAKEZELÉS (ha a ShowAsync hibát dob)
                     Debug.WriteLine($"FATALIS Hiba a ShowGameOverDialogAsync-ban: {ex.Message}");
-                    // Hiba esetén is a főmenü a biztonságos állapot
-                    navigateToMenu = true;
+                    if (IsNetworkGame)
+                    {
+                        HandleDisconnection("Váratlan hiba a dialógusban (pl. Hide).");
+                        navigateToMenu = false;
+                    }
+                    // Ha nem hálózati játék, akkor a régi viselkedés marad (finally visz tovább)
+                    else
+                    {
+                        navigateToMenu = true;
+                    }
                 }
                 finally
                 {
@@ -661,7 +684,10 @@ namespace Amoba.ViewModel
             });
         }
 
-        // Ez a metódus már CSAK a táblát törli és a köröket állítja be
+        /// <summary>
+        /// Ez a metódus CSAK a táblát törli és a köröket állítja be.
+        /// NEM bontja a hálózati kapcsolatot (azt a Cleanup() végzi).
+        /// </summary>
         private void ResetBoard()
         {
             try
@@ -681,10 +707,13 @@ namespace Amoba.ViewModel
                     // 3. KÖRÖK VISSZAÁLLÍTÁSA (Mindig P1/Host kezd)
                     IsPlayer1Turn = true;
                     IsPlayer2Turn = false;
+
                     isComputerTurn = false;
                     isProcessingAiMove = false;
 
                     // 4. ZÁROLÁS FELOLDÁSA
+                    // FONTOS: Az IsGameOver-t false-ra állítjuk,
+                    // hogy a következő játék elindulhasson.
                     IsGameOver = false;
 
                     (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();

@@ -37,7 +37,7 @@ namespace Amoba.Services
         private StreamSocketListener _tcpListener;
         private StreamSocket _gameSocket;
 
-        // --- JAVÍTÁS: Osztályszintű Olvasó és Író ---
+        // Osztályszintű Olvasó és Író ---
         private DataReader _socketReader;
         private DataWriter _socketWriter;
         // ---
@@ -280,7 +280,6 @@ namespace Amoba.Services
                 {
                     Debug.WriteLine($"Olvasási hiba (Váratlan): {ex.Message}");
                     OpponentDisconnected?.Invoke(this, EventArgs.Empty);
-                    Disconnect();
                 }
             }
         }
