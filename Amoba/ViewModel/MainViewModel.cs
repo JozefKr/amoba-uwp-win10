@@ -13,7 +13,6 @@ using Windows.Storage;
 
 namespace Amoba.ViewModel
 {
-    // Egyszerű osztály a talált játékok megjelenítéséhez a listában
     public class DiscoveredGame : ObservableObject
     {
         public string DisplayName { get; set; }
@@ -35,7 +34,10 @@ namespace Amoba.ViewModel
                 if (Set(ref _isJoiningGame, value))
                 {
                     RaisePropertyChanged(nameof(IsNameEntryEnabled));
+                    RaisePropertyChanged(nameof(IsInMenu));
                     (JoinGameCommand as RelayCommand<DiscoveredGame>)?.RaiseCanExecuteChanged();
+                    (StartLocalPvpCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    (StartAiGameCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -48,13 +50,17 @@ namespace Amoba.ViewModel
             get => _playerName;
             set
             {
+                // Csak akkor fut le, ha az érték tényleg változott
                 if (Set(ref _playerName, value))
                 {
+                    // A változás azonnali mentése
                     SavePlayerName(value);
+
+                    // Értesítjük a parancsokat ÉS a property-t
+                    RaisePropertyChanged(nameof(IsNetworkReady));
                     (StartHostingCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     (StartDiscoveryCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     (JoinGameCommand as RelayCommand<DiscoveredGame>)?.RaiseCanExecuteChanged();
-                    RaisePropertyChanged(nameof(IsNetworkReady));
                 }
             }
         }
@@ -68,6 +74,11 @@ namespace Amoba.ViewModel
                 if (Set(ref _isHosting, value))
                 {
                     RaisePropertyChanged(nameof(IsNameEntryEnabled));
+                    RaisePropertyChanged(nameof(IsInMenu));
+
+                    // --- JAVÍTÁS (1/3): Értesítjük a helyi gombokat is ---
+                    (StartLocalPvpCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    (StartAiGameCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 }
             }
         }
@@ -83,11 +94,23 @@ namespace Amoba.ViewModel
                 if (Set(ref _isSearching, value))
                 {
                     RaisePropertyChanged(nameof(IsNameEntryEnabled));
+                    RaisePropertyChanged(nameof(IsInMenu));
+
+                    (StartLocalPvpCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    (StartAiGameCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 }
             }
         }
 
+        /// <summary>
+        /// Igaz, ha a név-beviteli mezőnek engedélyezve kell lennie.
+        /// </summary>
         public bool IsNameEntryEnabled => !IsHosting && !IsSearching && !IsJoiningGame;
+
+        /// <summary>
+        /// Igaz, ha a fő hálózati gomboknak (Host, Keresés) látszódniuk kell.
+        /// </summary>
+        public bool IsInMenu => !IsHosting && !IsSearching && !IsJoiningGame;
 
         public string StatusMessage
         {
@@ -95,19 +118,10 @@ namespace Amoba.ViewModel
             set => Set(ref _statusMessage, value);
         }
 
+        /// <summary>
+        /// Igaz, ha a hálózati gomboknak engedélyezve kell lenniük.
+        /// </summary>
         public bool IsNetworkReady => !string.IsNullOrWhiteSpace(PlayerName);
-
-        // ===================================================================
-        // --- PARANCS MEZŐK ---
-        // ===================================================================
-        private ICommand _startLocalPvpCommand;
-        private ICommand _startAiGameCommand;
-
-        private ICommand _startHostingCommand;
-        private ICommand _startDiscoveryCommand;
-        private ICommand _stopDiscoveryCommand;
-        private ICommand _joinGameCommand;
-
 
         // ===================================================================
         // --- KONSTRUKTOR ---
@@ -127,9 +141,6 @@ namespace Amoba.ViewModel
             _networkService.GameStarted += NetworkService_GameStarted;
 
             InitializeCommands();
-
-            //Oldalbetöltéskor egyből szerver keresés bekapcsol
-            //StartDiscovery();
         }
 
         // ===================================================================
@@ -137,14 +148,16 @@ namespace Amoba.ViewModel
         // ===================================================================
         private void InitializeCommands()
         {
-            _startLocalPvpCommand = new RelayCommand(StartLocalPvpMethod);
-            _startAiGameCommand = new RelayCommand(StartAiGameMethod);
+            StartLocalPvpCommand = new RelayCommand(StartLocalPvpMethod, () => IsInMenu);
+            StartAiGameCommand = new RelayCommand(StartAiGameMethod, () => IsInMenu);
 
             // Hálózati parancsok
-            _startHostingCommand = new RelayCommand(ExecuteStartHosting, () => IsNetworkReady);
-            _startDiscoveryCommand = new RelayCommand(StartDiscovery, () => IsNetworkReady);
-            _stopDiscoveryCommand = new RelayCommand(StopDiscovery);
-            _joinGameCommand = new RelayCommand<DiscoveredGame>(ExecuteJoinGame, p => p != null && !IsJoiningGame && IsNetworkReady);
+            StartHostingCommand = new RelayCommand(ExecuteStartHosting, () => IsNetworkReady);
+            StartDiscoveryCommand = new RelayCommand(StartDiscovery, () => IsNetworkReady);
+            StopDiscoveryCommand = new RelayCommand(StopDiscovery);
+            JoinGameCommand = new RelayCommand<DiscoveredGame>(ExecuteJoinGame, p => p != null && !IsJoiningGame && IsNetworkReady);
+
+            StopHostingCommand = new RelayCommand(ExecuteStopHosting);
         }
 
         private void SavePlayerName(string name)
@@ -172,9 +185,8 @@ namespace Amoba.ViewModel
 
         #region Helyi Játék
 
-        // JAVÍTÁS: A régi 'StartGame' property-t ez a kettő helyettesíti
-        public ICommand StartLocalPvpCommand => _startLocalPvpCommand;
-        public ICommand StartAiGameCommand => _startAiGameCommand;
+        public ICommand StartLocalPvpCommand { get; private set; }
+        public ICommand StartAiGameCommand { get; private set; }
 
         /// <summary>
         /// Indítja a Helyi (Player vs Player) játékot
@@ -183,7 +195,6 @@ namespace Amoba.ViewModel
         {
             StopAllNetworkActivity();
 
-            // Közvetlenül a GameSizeViewModel-re navigálunk
             var localParams = new List<Parameter>
             {
                  new NamedParameter("isVsComputer", false),
@@ -199,7 +210,6 @@ namespace Amoba.ViewModel
         {
             StopAllNetworkActivity();
 
-            // Közvetlenül a GameSizeViewModel-re navigálunk
             var aiParams = new List<Parameter>
             {
                  new NamedParameter("isVsComputer", true),
@@ -212,8 +222,7 @@ namespace Amoba.ViewModel
 
         #region Hálózati Játék (Host és Kliens)
 
-        // 2. JÁTÉK HOSTOLÁSA (SZERVER)
-        public ICommand StartHostingCommand => _startHostingCommand;
+        public ICommand StartHostingCommand { get; private set; }
 
         private async void ExecuteStartHosting()
         {
@@ -235,8 +244,19 @@ namespace Amoba.ViewModel
             }
         }
 
-        // 3. JÁTÉK KERESÉSE (KLIENS)
-        public ICommand StartDiscoveryCommand => _startDiscoveryCommand;
+        public ICommand StopHostingCommand { get; private set; }
+
+        /// <summary>
+        /// Leállítja a hostolást és visszaáll a menübe.
+        /// </summary>
+        private void ExecuteStopHosting()
+        {
+            _networkService.StopHosting();
+            IsHosting = false;
+            StatusMessage = "Hostolás leállítva.";
+        }
+
+        public ICommand StartDiscoveryCommand { get; private set; }
 
         private async void StartDiscovery()
         {
@@ -250,8 +270,7 @@ namespace Amoba.ViewModel
             IsSearching = true;
         }
 
-        // 4. KERESÉS LEÁLLÍTÁSA
-        public ICommand StopDiscoveryCommand => _stopDiscoveryCommand;
+        public ICommand StopDiscoveryCommand { get; private set; }
 
         private void StopDiscovery()
         {
@@ -260,8 +279,7 @@ namespace Amoba.ViewModel
             StatusMessage = "Keresés leállítva.";
         }
 
-        // 5. CSATLAKOZÁS A TALÁLT JÁTÉKHOZ (KLIENS)
-        public ICommand JoinGameCommand => _joinGameCommand;
+        public ICommand JoinGameCommand { get; private set; }
 
         private async void ExecuteJoinGame(DiscoveredGame gameToJoin)
         {
@@ -281,7 +299,6 @@ namespace Amoba.ViewModel
         // --- ESEMÉNYKEZELŐK (A NetworkService-től) ---
         // ===================================================================
 
-        // Lefut, ha a Kliens talál egy Hostot
         private void NetworkService_GameFound(object sender, GameFoundEventArgs e)
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
@@ -294,18 +311,16 @@ namespace Amoba.ViewModel
             });
         }
 
-        // Lefut, ha bármilyen hálózati művelet (Keresés, Csatlakozás) hibát dob
         private void NetworkService_NetworkErrorOccurred(object sender, string errorMessage)
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 StatusMessage = errorMessage;
-                IsJoiningGame = false; // Engedélyezzük az újbóli csatlakozást
+                IsJoiningGame = false;
                 if (IsSearching) { StopDiscovery(); }
             });
         }
 
-        // Lefut a HOST oldalon, amikor egy Kliens sikeresen csatlakozott
         private void NetworkService_HostConnectionEstablished(object sender, EventArgs e)
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
@@ -313,7 +328,6 @@ namespace Amoba.ViewModel
                 _networkService.StopHosting();
                 StatusMessage = $"Kliens csatlakozott. Válassz táblaméretet...";
 
-                // Navigálás a GameSizePage-re
                 var networkParams = new List<Parameter>
                 {
                      new NamedParameter("isVsComputer", false),
@@ -324,22 +338,20 @@ namespace Amoba.ViewModel
             });
         }
 
-        // Lefut a KLIENS oldalon, amikor a Host elküldte a START üzenetet
         private void NetworkService_GameStarted(object sender, GameStartedEventArgs e)
         {
-            if (!e.IsHost) // Csak a Kliens reagál erre a navigációhoz
+            if (!e.IsHost)
             {
                 DispatcherHelper.CheckBeginInvokeOnUI(() =>
                 {
                     StatusMessage = $"Játék indul {e.OpponentName} ellen ({e.BoardSize}x{e.BoardSize})...";
 
-                    // Navigálás a GamePage-re
                     var networkParams = new List<Parameter>
                     {
                          new NamedParameter("boardSizeParam", e.BoardSize),
                          new NamedParameter("isVsComputerParam", false),
                          new NamedParameter("isNetworkGameParam", true),
-                         new NamedParameter("isHostParam", false), // ÉN A KLIENS VAGYOK
+                         new NamedParameter("isHostParam", false),
                          new NamedParameter("myPlayerNameParam", this.PlayerName),
                          new NamedParameter("opponentNameParam", e.OpponentName)
                     };

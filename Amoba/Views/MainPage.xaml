@@ -115,7 +115,7 @@
                 FontSize="16" 
                 Margin="0,0,0,10" 
                 Command="{Binding StartHostingCommand}"
-                Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                Visibility="{Binding IsInMenu, Converter={StaticResource BooleanToVisibilityConverter}}"
                 IsEnabled="{Binding IsNetworkReady}"
                 HorizontalAlignment="Stretch"
                 MinHeight="40" />
@@ -126,7 +126,7 @@
                 FontSize="16" 
                 Margin="0,0,0,20" 
                 Command="{Binding StartDiscoveryCommand}"
-                Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                Visibility="{Binding IsInMenu, Converter={StaticResource BooleanToVisibilityConverter}}"
                 IsEnabled="{Binding IsNetworkReady}"
                 HorizontalAlignment="Stretch"
                 MinHeight="40" />
@@ -143,6 +143,18 @@
                 Margin="0,0,0,20" 
                 Command="{Binding StopDiscoveryCommand}"
                 Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}"
+                HorizontalAlignment="Stretch"
+                Background="OrangeRed"
+                Foreground="White"
+                MinHeight="40" />
+
+            <Button
+                x:Name="stopHostingButton" 
+                Content="Hostolás Leállítása" 
+                FontSize="16" 
+                Margin="0,0,0,20" 
+                Command="{Binding StopHostingCommand}"
+                Visibility="{Binding IsHosting, Converter={StaticResource BooleanToVisibilityConverter}}"
                 HorizontalAlignment="Stretch"
                 Background="OrangeRed"
                 Foreground="White"
