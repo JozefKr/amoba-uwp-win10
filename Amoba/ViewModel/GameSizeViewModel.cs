@@ -7,6 +7,7 @@ using System.Windows.Input;
 using Autofac.Core;
 using Autofac;
 using System.Diagnostics;
+using GalaSoft.MvvmLight.Threading;
 
 namespace Amoba.ViewModel
 {
@@ -34,6 +35,16 @@ namespace Amoba.ViewModel
             _isNetworkGame = isNetworkGame; // Ez itt mindig true lesz
             _myPlayerName = myPlayerName;
             Enabled = true;
+
+            if (_isNetworkGame)
+            {
+                _networkService.HostConnectionEstablished += NetworkService_HostConnectionEstablished;
+                StatusMessage = "Várakozás a Kliens csatlakozására...";
+            }
+            else
+            {
+                StatusMessage = "Válassz pályaméretet:";
+            }
         }
 
         /// <summary>
@@ -143,6 +154,28 @@ namespace Amoba.ViewModel
                 Debug.WriteLine($"Érvénytelen méret paraméter: {size}");
                 Enabled = true;
             }
+        }
+
+        /// <summary>
+        /// Akkor fut le, amikor a Kliens sikeresen csatlakozott a TCP listenerhez.
+        /// </summary>
+        private void NetworkService_HostConnectionEstablished(object sender, EventArgs e)
+        {
+            // Amikor a kliens csatlakozik, frissítjük az üzenetet
+            // (A kliens neve a háttérben töltődik be a NetworkService-be)
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                StatusMessage = "Ellenfél csatlakozott! Válassz méretet a játék indításához:";
+            });
+        }
+
+        public override void Cleanup()
+        {
+            if (_isNetworkGame && _networkService != null)
+            {
+                _networkService.HostConnectionEstablished -= NetworkService_HostConnectionEstablished;
+            }
+            base.Cleanup();
         }
     }
 }
