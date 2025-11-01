@@ -1,12 +1,13 @@
 ﻿using Windows.ApplicationModel.Core;
 using Windows.UI.Core;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media.Animation;
+using Windows.UI.Xaml.Navigation;
 
 namespace Amoba.Views
 {
     /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
+    /// A főoldal (MainPage) code-behind logikája.
+    /// Kezeli az animációkat és a "Vissza" gomb viselkedését.
     /// </summary>
     public sealed partial class MainPage : BasePage
     {
@@ -14,27 +15,42 @@ namespace Amoba.Views
         {
             this.InitializeComponent();
 
-            // Animáció indítása ---
-            // Hivatkozzunk a XAML-ben elnevezett Storyboardra és indítsuk el.
-            // Győződj meg róla, hogy a 'using Windows.UI.Xaml.Media.Animation;' hozzá van adva!
-            (Resources["FadeOutLogoStoryboard"] as Storyboard)?.Begin();
+            // Az animáció indítását áthelyeztük az OnNavigatedTo-ba,
+            // hogy biztosan csak a betöltődés után fusson le.
         }
 
+        /// <summary>
+        /// Felülírja az alapértelmezett "Vissza" gomb viselkedését.
+        /// </summary>
         protected override void OnBackRequested(BackRequestedEventArgs e)
         {
-            // A SPECIÁLIS viselkedés:
-            if (!Frame.CanGoBack) // Ha már nem lehet visszalépni (mert mi vagyunk a főoldal)
+            // Ha a Frame előzményei üresek (vagyis a Főoldalon vagyunk
+            // és nincs hova visszalépni)...
+            if (!Frame.CanGoBack)
             {
-                // Akkor lépjünk ki!
-                e.Handled = true;
+                // ...akkor a "Vissza" gomb bezárja az alkalmazást.
+                e.Handled = true; // Jelezzük, hogy kezeltük az eseményt
                 CoreApplication.Exit();
             }
             else
             {
-                // Ez egy vészhelyzet (ha valahogy mégis idejutottunk, de van hova visszamenni)
-                // Hívjuk az alap viselkedést (a BasePage.OnBackRequested-et)
+                // Ha valamiért mégis van hova visszalépni,
+                // engedélyezzük az alapértelmezett visszalépést.
                 base.OnBackRequested(e);
             }
+        }
+
+        /// <summary>
+        /// Akkor hívódik meg, amikor az oldal láthatóvá válik.
+        /// Ez a helyes pont az indító animációk elindítására.
+        /// </summary>
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+
+            // Elindítjuk a XAML-ben definiált animációkat
+            FadeOutLogoStoryboard.Begin();
+            FadeInMenuStoryboard.Begin();
         }
     }
 }

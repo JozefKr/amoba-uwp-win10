@@ -4,47 +4,83 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d"
     xmlns:conv="using:Amoba.Converters"
+    mc:Ignorable="d"
     xmlns:local="using:Amoba.Views"
+    x:Name="PageRoot"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-    
+
     <Page.Resources>
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions"/>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+        
         <Storyboard x:Name="FadeOutLogoStoryboard">
             <DoubleAnimation
-                Storyboard.TargetName="LogoImage"
+                Storyboard.TargetName="LogoContainer"
                 Storyboard.TargetProperty="Opacity"
-                From="1.0" To="0.0" Duration="0:0:1" />
+                From="1.0" To="0.0" Duration="0:0:0.5" />
+
             <ObjectAnimationUsingKeyFrames
-                Storyboard.TargetName="LogoImage"
-                Storyboard.TargetProperty="Visibility"
-                BeginTime="0:0:1">
-                <DiscreteObjectKeyFrame KeyTime="0">
+                Storyboard.TargetName="LogoContainer"
+                Storyboard.TargetProperty="Visibility">
+
+                <DiscreteObjectKeyFrame KeyTime="0:0:0.5">
                     <DiscreteObjectKeyFrame.Value>
                         <Visibility>Collapsed</Visibility>
                     </DiscreteObjectKeyFrame.Value>
                 </DiscreteObjectKeyFrame>
             </ObjectAnimationUsingKeyFrames>
         </Storyboard>
+
+        <Storyboard x:Name="FadeInMenuStoryboard" BeginTime="00:00:00.5">
+
+            <ObjectAnimationUsingKeyFrames
+                Storyboard.TargetName="MenuStackPanel"
+                Storyboard.TargetProperty="Visibility">
+                <DiscreteObjectKeyFrame KeyTime="0">
+                    <DiscreteObjectKeyFrame.Value>
+                        <Visibility>Visible</Visibility>
+                    </DiscreteObjectKeyFrame.Value>
+                </DiscreteObjectKeyFrame>
+            </ObjectAnimationUsingKeyFrames>
+
+            <DoubleAnimation
+                Storyboard.TargetName="MenuStackPanel"
+                Storyboard.TargetProperty="Opacity"
+                From="0.0" To="1.0" Duration="0:0:0.5"/>
+
+        </Storyboard>
     </Page.Resources>
-    <Grid x:Name="RootGrid">
+
+    <Grid x:Name="RootGrid" Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
         <Viewbox 
+            x:Name="LogoContainer"
+            Grid.Row="0"
             HorizontalAlignment="Center" 
             VerticalAlignment="Center"
-            MaxWidth="400" 
-            MaxHeight="400">
+            MaxWidth="300" 
+            MaxHeight="300"
+            Margin="0,0,0,20">
             <Image x:Name="LogoImage" 
-                Source="ms-appx:///Assets/Images/game_logo.png" 
-                Stretch="Uniform" 
-                Opacity="1.0" />
+                   Source="ms-appx:///Assets/Images/game_logo.png" 
+                   Stretch="Uniform" 
+                   Opacity="1.0" />
         </Viewbox>
-        <StackPanel VerticalAlignment="Center"
+
+        <StackPanel x:Name="MenuStackPanel" 
+            Grid.Row="0"
+                    VerticalAlignment="Center"
                     HorizontalAlignment="Stretch"
                     Margin="20,0"
-                    MaxWidth="400">
+                    MaxWidth="400"
+                    Opacity="0.0"
+                    Visibility="Collapsed">
+ 
 
             <TextBlock Text="Amőba" 
                        Style="{ThemeResource HeaderTextBlockStyle}"
@@ -68,18 +104,13 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,20"
                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
-            
+
             <TextBox Header="Játékosneved" 
                 Margin="0,0,0,20"
                 FontSize="18"
                 PlaceholderText="Pl. Pista"
                 Text="{Binding PlayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 IsEnabled="{Binding IsNameEntryEnabled}"/>
-
-            <ProgressRing IsActive="{Binding IsSearching}"
-                      HorizontalAlignment="Center"
-                      Margin="0,0,0,10"
-                      Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
 
             <Button
                 x:Name="startHostingButton" 
@@ -88,6 +119,7 @@
                 Margin="0,0,0,10" 
                 Command="{Binding StartHostingCommand}"
                 Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                IsEnabled="{Binding IsNetworkReady}"
                 HorizontalAlignment="Stretch"
                 MinHeight="40" />
 
@@ -98,8 +130,14 @@
                 Margin="0,0,0,20" 
                 Command="{Binding StartDiscoveryCommand}"
                 Visibility="{Binding IsSearching, Converter={StaticResource InverseBooleanToVisibilityConverter}}"
+                IsEnabled="{Binding IsNetworkReady}"
                 HorizontalAlignment="Stretch"
                 MinHeight="40" />
+
+            <ProgressRing IsActive="{Binding IsSearching}"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,10"
+                          Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
 
             <Button
                 x:Name="stopDiscoveryButton" 
@@ -134,7 +172,6 @@
                                 CommandParameter="{Binding}"
                                 HorizontalAlignment="Stretch"
                                 Style="{StaticResource TextBlockButtonStyle}"
-                                
                                 Command="{Binding DataContext.JoinGameCommand, ElementName=RootGrid}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
