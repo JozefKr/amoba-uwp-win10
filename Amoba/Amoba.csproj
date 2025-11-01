@@ -142,7 +142,6 @@
     <Compile Include="Services\ViewService.cs" />
     <Compile Include="Services\ViewServiceExtensions.cs" />
     <Compile Include="ViewModel\GameSizeViewModel.cs" />
-    <Compile Include="ViewModel\GameTypeViewModel.cs" />
     <Compile Include="ViewModel\GameViewModel.cs" />
     <Compile Include="ViewModel\MainViewModel.cs" />
     <Compile Include="Views\BasePage.cs" />
@@ -151,9 +150,6 @@
     </Compile>
     <Compile Include="Views\GameSizePage.xaml.cs">
       <DependentUpon>GameSizePage.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\GameTypePage.xaml.cs">
-      <DependentUpon>GameTypePage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Views\MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
@@ -230,10 +226,6 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Views\GameSizePage.xaml">
-      <SubType>Designer</SubType>
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="Views\GameTypePage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

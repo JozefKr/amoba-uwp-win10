@@ -64,7 +64,6 @@ namespace Amoba
             var viewService = container.Resolve<IViewService>();
 
             viewService.RegisterPage(typeof(MainViewModel), typeof(MainPage));
-            viewService.RegisterPage(typeof(GameTypeViewModel), typeof(GameTypePage));
             viewService.RegisterPage(typeof(GameSizeViewModel), typeof(GameSizePage));
             viewService.RegisterPage(typeof(GameViewModel), typeof(GamePage));
 

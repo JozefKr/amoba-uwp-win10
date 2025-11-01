@@ -11,20 +11,19 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
+        <!-- ... (A konverterek és animációk (Storyboard) változatlanok) ... -->
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions"/>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
-        
+
         <Storyboard x:Name="FadeOutLogoStoryboard">
             <DoubleAnimation
                 Storyboard.TargetName="LogoContainer"
                 Storyboard.TargetProperty="Opacity"
                 From="1.0" To="0.0" Duration="0:0:0.5" />
-
             <ObjectAnimationUsingKeyFrames
                 Storyboard.TargetName="LogoContainer"
                 Storyboard.TargetProperty="Visibility">
-
                 <DiscreteObjectKeyFrame KeyTime="0:0:0.5">
                     <DiscreteObjectKeyFrame.Value>
                         <Visibility>Collapsed</Visibility>
@@ -33,31 +32,19 @@
             </ObjectAnimationUsingKeyFrames>
         </Storyboard>
 
-        <Storyboard x:Name="FadeInMenuStoryboard" BeginTime="00:00:00.5">
-
-            <ObjectAnimationUsingKeyFrames
-                Storyboard.TargetName="MenuStackPanel"
-                Storyboard.TargetProperty="Visibility">
-                <DiscreteObjectKeyFrame KeyTime="0">
-                    <DiscreteObjectKeyFrame.Value>
-                        <Visibility>Visible</Visibility>
-                    </DiscreteObjectKeyFrame.Value>
-                </DiscreteObjectKeyFrame>
-            </ObjectAnimationUsingKeyFrames>
-
+        <Storyboard x:Name="FadeInMenuStoryboard">
             <DoubleAnimation
                 Storyboard.TargetName="MenuStackPanel"
                 Storyboard.TargetProperty="Opacity"
-                From="0.0" To="1.0" Duration="0:0:0.5"/>
-
+                From="0.0" To="1.0" Duration="0:0:1"/>
         </Storyboard>
+
     </Page.Resources>
 
     <Grid x:Name="RootGrid" Padding="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-
         <Viewbox 
             x:Name="LogoContainer"
             Grid.Row="0"
@@ -72,15 +59,14 @@
                    Opacity="1.0" />
         </Viewbox>
 
-        <StackPanel x:Name="MenuStackPanel" 
-            Grid.Row="0"
+        <StackPanel x:Name="MenuStackPanel"
+                    Grid.Row="0"
                     VerticalAlignment="Center"
                     HorizontalAlignment="Stretch"
                     Margin="20,0"
                     MaxWidth="400"
                     Opacity="0.0"
-                    Visibility="Collapsed">
- 
+                    Visibility="Visible">
 
             <TextBlock Text="Amőba" 
                        Style="{ThemeResource HeaderTextBlockStyle}"
@@ -89,15 +75,26 @@
                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
 
             <Button
-                x:Name="newgame" 
-                Content="Játék indítása (Helyi/AI)" 
-                FontSize="20" 
-                Margin="0,0,0,30" 
-                Command="{Binding StartGame}"
+                x:Name="StartLocalPvpButton" 
+                Content="Játék Barát Ellen (Helyi)" 
+                FontSize="18" 
+                Margin="0,0,0,10" 
+                Command="{Binding StartLocalPvpCommand}"
                 MinHeight="50"
                 HorizontalAlignment="Stretch"
                 Background="{ThemeResource SystemControlHighlightAccentBrush}"
-                Foreground="White" />
+                Foreground="White"/>
+
+            <Button
+                x:Name="StartAiButton" 
+                Content="Játék Gép Ellen (AI)" 
+                FontSize="18" 
+                Margin="0,0,0,30" 
+                Command="{Binding StartAiGameCommand}"
+                MinHeight="50"
+                HorizontalAlignment="Stretch"
+                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                Foreground="White"/>
 
             <TextBlock Text="— Hálózati játék —" 
                        Style="{ThemeResource BaseTextBlockStyle}"
@@ -172,7 +169,7 @@
                                 CommandParameter="{Binding}"
                                 HorizontalAlignment="Stretch"
                                 Style="{StaticResource TextBlockButtonStyle}"
-                                Command="{Binding DataContext.JoinGameCommand, ElementName=RootGrid}"/>
+                                Command="{Binding DataContext.JoinGameCommand, ElementName=PageRoot}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
