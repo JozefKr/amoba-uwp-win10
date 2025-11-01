@@ -73,7 +73,8 @@
                 Margin="0,0,0,20"
                 FontSize="18"
                 PlaceholderText="Pl. Pista"
-                Text="{Binding PlayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                Text="{Binding PlayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                IsEnabled="{Binding IsNameEntryEnabled}"/>
             <Button
                 x:Name="startHostingButton" 
                 Content="Játék Hostolása (Légy Te a Szerver)" 
