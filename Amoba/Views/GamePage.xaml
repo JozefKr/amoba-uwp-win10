@@ -14,6 +14,7 @@
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions" />
         <conv:TurnToColorConverter x:Key="turnToColor"/>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:BooleanToAlignmentConverter x:Key="BoolToAlignmentConverter" />
 
         <Style x:Key="GameBoardButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}"/>
@@ -309,10 +310,37 @@
                           ItemsSource="{Binding ChatHistory}"
                           Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
                           BorderThickness="1"
-                          BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}">
+                          BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                          SelectionMode="None" 
+                          IsItemClickEnabled="False">
+
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="2,4"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+
                     <ListView.ItemTemplate>
+                        <!-- DataTemplate (Egysoros) -->
                         <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="WrapWholeWords"/>
+                            <!-- A Grid továbbra is biztosítja a jobbra/balra igazítást -->
+                            <Grid HorizontalAlignment="{Binding IsMine, Converter={StaticResource BoolToAlignmentConverter}}">
+
+                                <!-- A buborék stílusa maradhat, de a StackPanel helyett
+                                     egyetlen TextBlock-ot használunk, ami a formázott szöveghez van kötve. -->
+                                <Border Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}"
+                                        CornerRadius="5"
+                                        Padding="8"
+                                        MaxWidth="240">
+
+                                    <TextBlock 
+                                        Text="{Binding DisplayMessage}" 
+                                        TextWrapping="WrapWholeWords" />
+
+                                </Border>
+                            </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>

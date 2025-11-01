@@ -120,11 +120,13 @@
       <DependentUpon>App.xaml</DependentUpon>
     </Compile>
     <Compile Include="Bootstrapper.cs" />
+    <Compile Include="Converters\BooleanToAlignmentConverter.cs" />
     <Compile Include="Converters\BooleanToVisibilityConverter.cs" />
     <Compile Include="Converters\InverseBooleanToVisibilityConverter.cs" />
     <Compile Include="Converters\PlacesToDimensionsConverter.cs" />
     <Compile Include="Converters\TurnToColorConverter.cs" />
     <Compile Include="Messages\PlaySoundMessage.cs" />
+    <Compile Include="Model\ChatMessage.cs" />
     <Compile Include="Model\GameType.cs" />
     <Compile Include="Model\IconType.cs" />
     <Compile Include="Model\Place.cs" />

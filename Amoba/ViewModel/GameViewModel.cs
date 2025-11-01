@@ -43,7 +43,7 @@ namespace Amoba.ViewModel
 
         private string _chatMessageInput;
         private ICommand _sendChatCommand;
-        public ObservableCollection<string> ChatHistory { get; private set; }
+        public ObservableCollection<ChatMessage> ChatHistory { get; private set; }
         public string ChatMessageInput
         {
             get => _chatMessageInput;
@@ -169,7 +169,7 @@ namespace Amoba.ViewModel
                 OpponentName = opponentNameParam;
             }
 
-            ChatHistory = new ObservableCollection<string>();
+            ChatHistory = new ObservableCollection<ChatMessage>();
 
             // 2. FELIRATKOZÁS (Csak ha hálózati játék)
             if (_isNetworkGame)
@@ -445,14 +445,25 @@ namespace Amoba.ViewModel
                 await _networkService.SendChatMessageAsync(messageToSend);
 
                 // 2. Hozzáadjuk a saját előzményeinkhez
-                // (Használjuk a MyPlayerName-et a következetességért)
-                ChatHistory.Add($"Én ({MyPlayerName}): {messageToSend}");
+                ChatHistory.Add(new ChatMessage
+                {
+                    Author = MyPlayerName,
+                    Message = messageToSend,
+                    IsMine = true, // Ez a saját üzenetünk
+                    Timestamp = DateTime.Now
+                });
             }
             catch (Exception ex)
             {
                 // Hiba esetén visszaállítjuk a szöveget, hogy újra próbálhassa
                 ChatMessageInput = messageToSend;
-                ChatHistory.Add($"[HIBA A KÜLDÉSKOR: {ex.Message}]");
+                ChatHistory.Add(new ChatMessage
+                {
+                    Author = "Hiba",
+                    Message = $"Küldés sikertelen: {ex.Message}",
+                    IsMine = true,
+                    Timestamp = DateTime.Now
+                });
             }
         }
 
@@ -621,7 +632,13 @@ namespace Amoba.ViewModel
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 // Hozzáadjuk az ellenfél üzenetét az előzményekhez
-                ChatHistory.Add($"{OpponentName}: {messageText}");
+                ChatHistory.Add(new ChatMessage
+                {
+                    Author = OpponentName,
+                    Message = messageText,
+                    IsMine = false, // Ez az ellenfél üzenete
+                    Timestamp = DateTime.Now
+                });
             });
         }
 
