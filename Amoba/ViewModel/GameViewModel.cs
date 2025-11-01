@@ -501,6 +501,19 @@ namespace Amoba.ViewModel
         {
             try
             {
+                // Csak akkor dolgozzuk fel a lépést, ha az ellenfél volt soron.
+                // Ha én vagyok a Host (X) és a Játékos 2 (O) volt soron, VAGY
+                // ha én vagyok a Kliens (O) és a Játékos 1 (X) volt soron.
+                bool isOpponentsTurn = (AmIHost && IsPlayer2Turn) || (!AmIHost && IsPlayer1Turn);
+
+                if (!isOpponentsTurn)
+                {
+                    // Csalási kísérlet vagy hálózati deszinkronizáció.
+                    // Csendben figyelmen kívül hagyjuk a lépést.
+                    Debug.WriteLine($"[CSALÁS-VÉDELEM] Lépés fogadva, de nem az ellenfél volt soron. Lépés eldobva.");
+                    return;
+                }
+
                 await DispatcherHelper.RunAsync(async () =>
                 {
                     IconType opponentIcon = AmIHost ? IconType.Circle : IconType.Cross;
