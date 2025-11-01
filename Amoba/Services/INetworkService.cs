@@ -22,6 +22,11 @@ namespace Amoba.Services
         event EventHandler<string> ChatMessageReceived;
 
         /// <summary>
+        /// Akkor sül el, ha az ellenféltől 'TYPING;' üzenet érkezik.
+        /// </summary>
+        event EventHandler OpponentIsTyping;
+
+        /// <summary>
         /// Akkor aktiválódik, ha az ellenfél a Főmenübe lépett (szándékos kilépés).
         /// </summary>
         event EventHandler OpponentLeft;
@@ -99,5 +104,10 @@ namespace Amoba.Services
         /// Chat-üzenetet küld a másik játékosnak.
         /// </summary>
         Task SendChatMessageAsync(string message);
+
+        /// <summary>
+        /// Elküld egy "gépel" jelzést a másik félnek.
+        /// </summary>
+        Task SendTypingIndicatorAsync();
     }
 }

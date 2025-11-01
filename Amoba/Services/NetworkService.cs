@@ -8,11 +8,9 @@ using Windows.Networking.Connectivity;
 using Windows.Networking.Sockets;
 using Windows.Storage.Streams;
 using System.Diagnostics;
-using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace Amoba.Services
 {
-    // Ez a kód már a 'Host dönti el a méretet' logikát követi
     public class NetworkService : INetworkService, IDisposable
     {
         public event EventHandler<GameFoundEventArgs> GameFound;
@@ -25,21 +23,14 @@ namespace Amoba.Services
         public event EventHandler OpponentLeft;
         public event EventHandler LeaveAcknowledged;
         public event EventHandler<string> ChatMessageReceived;
+        public event EventHandler OpponentIsTyping;
 
         // --- Konstansok ---
         private const string MulticastGroupAddress = "239.255.42.99";
         private const string UdpPort = "9090";
         private const string TcpGamePort = "9091";
         private const string BroadcastMessagePrefix = "AMOBA_GAME_HOST;";
-
-        /// <summary>
-        /// Milyen időközönként küldjünk "életjelet" (10s).
-        /// </summary>
-        private const int PingIntervalSeconds = 10;
-        /// <summary>
-        /// Mennyi ideig várjunk a másik félre, mielőtt halottnak nyilvánítjuk (30s).
-        /// Ennek NAGYOBBNAK kell lennie, mint a PingIntervalSeconds.
-        /// </summary>
+        private const int KeepaliveIntervalSeconds = 10;
         private const int KeepaliveTimeoutSeconds = 30;
 
         // --- Hálózati Objektumok ---
@@ -48,15 +39,21 @@ namespace Amoba.Services
         private StreamSocketListener _tcpListener;
         private StreamSocket _gameSocket;
 
-        // Osztályszintű Olvasó és Író
         private DataReader _socketReader;
         private DataWriter _socketWriter;
 
-        private Timer _pingTimer;
         public string CachedOpponentName { get; private set; }
+
         private HostName _multicastHostName;
         private Timer _broadcastTimer;
+        private Timer _keepaliveTimer;
         private CancellationTokenSource _readCts;
+
+        // =======================================================
+        // --- "Lakat" az aszinkron írói műveletekhez ---
+        // =======================================================
+        private readonly SemaphoreSlim _writerSemaphore = new SemaphoreSlim(1, 1);
+
 
         // --- Konstruktor ---
         public NetworkService()
@@ -66,7 +63,7 @@ namespace Amoba.Services
         }
 
         // ===================================================================
-        // UDP HOSTOLÁS (Változatlan)
+        // UDP HOSTOLÁS
         // ===================================================================
         public async Task StartHostingAsync(string playerName)
         {
@@ -199,8 +196,6 @@ namespace Amoba.Services
 
         private void TcpListener_ConnectionReceived(StreamSocketListener sender, StreamSocketListenerConnectionReceivedEventArgs args)
         {
-            // Mivel a Kliens sikeresen csatlakozott, már nincs szükségünk
-            // az UDP hirdetésre. Állítsuk le.
             StopHosting();
 
             if (_gameSocket != null) { args.Socket.Dispose(); return; }
@@ -211,18 +206,13 @@ namespace Amoba.Services
             _tcpListener?.Dispose();
             _tcpListener = null;
 
-            // --- Osztályszintű Olvasó/Író létrehozása ---
             _socketReader = new DataReader(_gameSocket.InputStream);
             _socketReader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
             _socketWriter = new DataWriter(_gameSocket.OutputStream);
-            // ---
 
-            StartReading(); // Figyelés indítása
-
-            // Életjel küldésének indítása (Host oldal)
-            StartPingTimer();
-
-            HostConnectionEstablished?.Invoke(this, EventArgs.Empty); // Jelzés a MainViewModel-nek
+            StartReading();
+            StartKeepaliveTimer(); // Életjel indítása
+            HostConnectionEstablished?.Invoke(this, EventArgs.Empty);
         }
 
         // ===================================================================
@@ -236,22 +226,15 @@ namespace Amoba.Services
                 HostName remoteHost = new HostName(hostIpAddress);
                 _gameSocket = new StreamSocket();
                 await _gameSocket.ConnectAsync(remoteHost, TcpGamePort);
-                Debug.WriteLine("Kapcsolódás sikeres! Várakozás a Host START üzenetére...");
+                Debug.WriteLine("Kapcsolódás sikeres! Olvasó/író létrehozása...");
 
-                // --- Osztályszintű Olvasó/Író létrehozása ---
-                _socketReader = new DataReader(_gameSocket.InputStream)
-                {
-                    UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8
-                };
+                _socketReader = new DataReader(_gameSocket.InputStream);
+                _socketReader.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
                 _socketWriter = new DataWriter(_gameSocket.OutputStream);
-                // ---
 
-                StartReading(); // Figyelés indítása
+                StartReading();
+                StartKeepaliveTimer(); // Életjel indítása
 
-                // Életjel küldésének indítása (Kliens oldal)
-                StartPingTimer();
-
-                // Elküldjük a nevünket a Hostnak ---
                 await SendMessageAsync($"NAME;{myPlayerName}");
                 Debug.WriteLine($"[CLIENT SEND] Név elküldve: {myPlayerName}");
             }
@@ -266,9 +249,17 @@ namespace Amoba.Services
         // ===================================================================
         // KOMMUNIKÁCIÓ ÉS LÉPÉSEK
         // ===================================================================
-        /// <summary>
-        /// Folyamatosan figyeli a bejövő TCP üzeneteket, időtúllépéssel.
-        /// </summary>
+        private void StartKeepaliveTimer()
+        {
+            _keepaliveTimer?.Dispose();
+            _keepaliveTimer = new Timer(
+                async (state) => await SendKeepalivePingAsync(),
+                null,
+                TimeSpan.FromSeconds(KeepaliveIntervalSeconds),
+                TimeSpan.FromSeconds(KeepaliveIntervalSeconds)
+            );
+        }
+
         private async void StartReading()
         {
             _readCts = new CancellationTokenSource();
@@ -276,38 +267,27 @@ namespace Amoba.Services
             {
                 while (!_readCts.IsCancellationRequested)
                 {
-                    // 1. Létrehozunk egy időzítőt erre az olvasási kísérletre
                     using (var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(KeepaliveTimeoutSeconds)))
-                    // 2. Kombináljuk a fő leállító (_readCts) és az időzítő tokenjét
                     using (var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(_readCts.Token, timeoutCts.Token))
                     {
                         uint size;
                         try
                         {
-                            // 3. Várunk az adatra a *kombinált* tokennel
                             size = await _socketReader.LoadAsync(sizeof(uint)).AsTask(combinedCts.Token);
                         }
                         catch (OperationCanceledException)
                         {
                             if (timeoutCts.IsCancellationRequested)
                             {
-                                // Ez egy KEEPALIVE IDŐTÚLLÉPÉS!
-                                // A másik fél 30 másodperce nem küldött semmit.
                                 throw new Exception($"Keepalive időtúllépés ({KeepaliveTimeoutSeconds}s). A kapcsolat bontva.");
                             }
-                            // Ha nem az időtúllépés okozta, akkor a _readCts (kulturált Disconnect)
-                            // volt az, hagyjuk, hogy a külső 'catch' elkapja.
                             throw;
                         }
 
                         if (size == 0) throw new Exception("Kapcsolat lezárva (0 bájt olvasva).");
 
-                        // Ha az adat megérkezett az időtúllépés *előtt*, a kód normálisan folytatódik...
-
                         uint messageLength = _socketReader.ReadUInt32();
 
-                        // A biztonság kedvéért a törzs olvasására is tegyünk időtúllépést
-                        // (bár ennek azonnal meg kellene érkeznie)
                         uint actualMessageSize;
                         try
                         {
@@ -322,7 +302,6 @@ namespace Amoba.Services
                             throw new Exception($"Időtúllépés az üzenettörzs olvasásakor ({KeepaliveTimeoutSeconds}s).");
                         }
 
-
                         if (actualMessageSize == 0 && messageLength > 0) throw new Exception("Kapcsolat lezárva (üzenet olvasása közben).");
 
                         if (actualMessageSize == messageLength)
@@ -330,92 +309,41 @@ namespace Amoba.Services
                             string message = _socketReader.ReadString(actualMessageSize);
                             HandleReceivedMessage(message);
                         }
-                    } // end using (timeout tokens)
-                } // end while
+                    }
+                }
             }
             catch (Exception ex)
             {
                 if (_readCts.IsCancellationRequested)
                 {
-                    // VÁRT VISELKEDÉS (Amikor mi magunk hívjuk a Disconnect()-et)
                     Debug.WriteLine("StartReading: Feladat szándékosan leállítva (Cancel).");
                 }
                 else
                 {
-                    // Bármilyen más hiba (pl. "forcibly closed", vagy a mi IDŐTÚLLÉPÉSÜNK)
-                    // azt jelenti, hogy a kapcsolat megszakadt.
                     Debug.WriteLine($"Olvasási hiba (Váratlan vagy Időtúllépés): {ex.Message}");
                     OpponentDisconnected?.Invoke(this, EventArgs.Empty);
-                    Disconnect(); // Ez a kulcs
+                    Disconnect();
                 }
-            }
-        }
-
-        /// <summary>
-        /// Elindít egy időzítőt, ami 10 másodpercenként PING üzenetet küld.
-        /// </summary>
-        private void StartPingTimer()
-        {
-            // Leállítjuk a régit, ha volt
-            _pingTimer?.Dispose();
-
-            // Létrehozzuk az új időzítőt
-            _pingTimer = new Timer(
-                async (state) => await SendPingAsync(), // A metódus, amit hív
-                null, // Állapot (nem kell)
-                TimeSpan.FromSeconds(PingIntervalSeconds), // Azonnal induljon? Nem, ennyi idő múlva
-                TimeSpan.FromSeconds(PingIntervalSeconds)  // Ismétlődés
-            );
-            Debug.WriteLine("Ping időzítő elindítva.");
-        }
-
-        /// <summary>
-        /// Aszinkron módon elküld egy PING üzenetet.
-        /// </summary>
-        private async Task SendPingAsync()
-        {
-            try
-            {
-                await SendMessageAsync("PING;");
-                Debug.WriteLine("[KEEPALIVE] PING elküldve.");
-            }
-            catch (Exception ex)
-            {
-                // Hiba a PING küldésekor = a kapcsolat valószínűleg halott.
-                Debug.WriteLine($"Hiba PING küldésekor: {ex.Message}");
-                // A 'StartReading' metódus időtúllépése fogja ezt lekezelni.
             }
         }
 
         private void HandleReceivedMessage(string message)
         {
+
             if (message.StartsWith("START;"))
             {
                 string[] parts = message.Split(';');
                 if (parts.Length >= 3 && int.TryParse(parts[2], out int boardSize))
                 {
                     string opponentName = parts[1];
-                    GameStarted?.Invoke(this, new GameStartedEventArgs(opponentName, boardSize, false)); // Kliens = false
+                    GameStarted?.Invoke(this, new GameStartedEventArgs(opponentName, boardSize, false));
                 }
             }
             else if (message.StartsWith("NAME;"))
             {
-                // Ez a HOST oldalon fut le.
                 string clientName = message.Substring(5);
                 Debug.WriteLine($"[HOST RECV] Kliens név fogadva: {clientName}");
                 this.CachedOpponentName = clientName;
-            }
-            else if (message.StartsWith("PING;"))
-            {
-                // Csendben fogadjuk. A lényeg, hogy érkezett adat,
-                // így a 'StartReading' időtúllépése visszaállt.
-                Debug.WriteLine("[KEEPALIVE] PING fogadva.");
-            }
-            else if (message.StartsWith("CHAT;"))
-            {
-                // Egy chat üzenet érkezett
-                string chatMessage = message.Substring(5);
-                ChatMessageReceived?.Invoke(this, chatMessage);
             }
             else if (message.StartsWith("MOVE:"))
             {
@@ -426,27 +354,33 @@ namespace Amoba.Services
             }
             else if (message.StartsWith("REMATCH;"))
             {
-                // Az ellenfél visszavágót kért.
                 RematchReceived?.Invoke(this, EventArgs.Empty);
             }
             else if (message.StartsWith("LEAVE;"))
             {
-                // A másik fél jelezte, hogy kilép (ő vár az ACK-ra).
                 OpponentLeft?.Invoke(this, EventArgs.Empty);
-
-                // DINAMIKUS VÁLASZ: Azonnal küldünk egy nyugtát ("LEAVE_ACK;")
-                Task.Run(async () => await SendLeaveAckAsync());
             }
             else if (message.StartsWith("LEAVE_ACK;"))
             {
-                // A másik fél nyugtázta, hogy vette a kilépési szándékunkat.
                 LeaveAcknowledged?.Invoke(this, EventArgs.Empty);
+            }
+            else if (message.StartsWith("CHAT:"))
+            {
+                string chatText = message.Substring(5);
+                ChatMessageReceived?.Invoke(this, chatText);
+            }
+            else if (message.StartsWith("PING;"))
+            {
+                // Csendben fogadjuk
+            }
+            else if (message.StartsWith("TYPING;"))
+            {
+                OpponentIsTyping?.Invoke(this, EventArgs.Empty);
             }
         }
 
         public async Task SendLeaveGameAsync()
         {
-            // A SendMessageAsync már kezeli a hibákat (ObjectDisposed, stb.)
             await SendMessageAsync("LEAVE;");
             Debug.WriteLine("[NETWORK SEND] Leave üzenet küldve.");
         }
@@ -470,11 +404,7 @@ namespace Amoba.Services
                 await SendMessageAsync(message);
                 Debug.WriteLine($"[HOST SEND] Start üzenet küldve: {message}");
 
-                string opponentName = _gameSocket.Information.RemoteHostName.DisplayName ?? "Kliens";
-
-                // A Host-nak még meg kell várnia a kliens 'NAME;' üzenetét,
-                // ezért itt az "opponentName" még lehet, hogy nem a végleges.
-                // A GameStarted esemény a Host-on beállítja az alap nevet.
+                string opponentName = CachedOpponentName ?? _gameSocket.Information.RemoteHostName.DisplayName;
                 GameStarted?.Invoke(this, new GameStartedEventArgs(opponentName, boardSize, true)); // Host = true
             }
             catch (Exception ex)
@@ -491,30 +421,37 @@ namespace Amoba.Services
             await SendMessageAsync(moveMessage);
         }
 
-        private async Task SendMessageAsync(string message)
+        private async Task SendKeepalivePingAsync()
         {
-            if (_socketWriter == null) // A _socketWriter-t ellenőrizzük
-            {
-                Debug.WriteLine("SendMessageAsync: Socket Writer nincs inicializálva, küldés kihagyva.");
-                throw new InvalidOperationException("Socket Writer nincs inicializálva, küldés kihagyva.");
-            }
             try
             {
-                _socketWriter.WriteUInt32(_socketWriter.MeasureString(message));
-                _socketWriter.WriteString(message);
-                await _socketWriter.StoreAsync();
-                await _socketWriter.FlushAsync();
+                await SendMessageAsync("PING;");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Hiba az üzenet küldésekor: {ex.Message}");
-                throw new Exception("Hiba az üzenet küldésekor", ex);
+                // Ha a PING küldése hibát dob (pl. mert a kapcsolat már megszakadt),
+                // azt itt elkapjuk, és naplózzuk.
+                // NEM dobjuk tovább, mert az összeomlasztaná a Timer szálat.
+                Debug.WriteLine($"Keepalive hiba (elkapva): {ex.Message}");
+
+                // A 'StartReading' metódus úgyis észlelni fogja a hibát
+                // (időtúllépés vagy "0 bájt olvasva"), és az fogja
+                // elindítani a 'OpponentDisconnected' eseményt.
             }
+        }
+
+        public async Task SendChatMessageAsync(string message)
+        {
+            await SendMessageAsync($"CHAT:{message}");
+        }
+
+        public async Task SendTypingIndicatorAsync()
+        {
+            await SendMessageAsync("TYPING;");
         }
 
         public async Task SendLeaveAckAsync()
         {
-            // A SendMessageAsync már kezeli a hibákat (ObjectDisposed, stb.)
             try
             {
                 await SendMessageAsync("LEAVE_ACK;");
@@ -522,22 +459,42 @@ namespace Amoba.Services
             }
             catch (Exception ex)
             {
-                // Ha a nyugta küldése hibát dob, az már nem baj,
-                // mert a kapcsolat valószínűleg már bontva van.
                 Debug.WriteLine($"Hiba a 'Leave ACK' küldésekor: {ex.Message}");
             }
         }
 
-        public async Task SendChatMessageAsync(string message)
+        private async Task SendMessageAsync(string message)
         {
-            // Biztonsági ellenőrzés (pl. ne lehessen ; jellel protokollt törni)
-            if (message.Contains(";"))
-            {
-                message = message.Replace(";", ":");
-            }
+            // =======================================================
+            // --- Szálbiztos zárolás SemaphoreSlim-mel ---
+            // =======================================================
 
-            await SendMessageAsync($"CHAT;{message}");
-            Debug.WriteLine($"[NETWORK SEND] Chat üzenet küldve: {message}");
+            // Várunk, amíg miénk lesz a "lakat". Ez nem blokkolja a UI szálat.
+            await _writerSemaphore.WaitAsync();
+            try
+            {
+                if (_socketWriter == null)
+                {
+                    Debug.WriteLine("SendMessageAsync: Socket Writer nincs inicializálva, küldés kihagyva.");
+                    throw new InvalidOperationException("Socket Writer nincs inicializálva, küldés kihagyva.");
+                }
+
+                _socketWriter.WriteUInt32(_socketWriter.MeasureString(message));
+                _socketWriter.WriteString(message);
+
+                await _socketWriter.StoreAsync();
+                //await _socketWriter.FlushAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Hiba az üzenet küldésekor: {ex.Message}");
+                throw new Exception("Hiba az üzenet küldésekor", ex);
+            }
+            finally
+            {
+                // Elengedjük a "lakatot", hogy más szál is írhasson.
+                _writerSemaphore.Release();
+            }
         }
 
         // ===================================================================
@@ -545,11 +502,8 @@ namespace Amoba.Services
         // ===================================================================
         public void Disconnect()
         {
-            _readCts?.Cancel(); // Leállítja a StartReading ciklust
-
-            // Leállítjuk a PING időzítőt
-            _pingTimer?.Dispose();
-            _pingTimer = null;
+            _readCts?.Cancel();
+            _keepaliveTimer?.Dispose(); _keepaliveTimer = null;
 
             _socketReader?.Dispose();
             _socketReader = null;
@@ -574,6 +528,7 @@ namespace Amoba.Services
             StopHosting();
             StopDiscovering();
             Disconnect();
+            _writerSemaphore?.Dispose(); // A szemafor is IDisposable
             GC.SuppressFinalize(this);
         }
 

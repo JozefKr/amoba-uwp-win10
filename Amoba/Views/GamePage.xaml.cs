@@ -194,5 +194,12 @@ namespace Amoba.Views
                 }
             }
         }
+
+        private void ChatInputBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            // Meghívjuk a ViewModel "UserIsTyping" metódusát
+            // (a "throttling"-ot a ViewModel kezeli)
+            Vm?.UserIsTyping();
+        }
     }
 }

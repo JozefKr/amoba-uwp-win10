@@ -8,12 +8,13 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Input;
 using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls; // Szükséges a ContentDialog-hoz
+using Windows.UI.Xaml.Controls;
 using Amoba.Messages;
-using System.Collections.Generic;
+using System.Collections.Generic; // Szükséges a List<int>-hez
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Amoba.ViewModel
 {
@@ -51,11 +52,18 @@ namespace Amoba.ViewModel
             {
                 if (Set(ref _chatMessageInput, value))
                 {
-                    // Frissítjük a "Küldés" gomb állapotát
                     (SendChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
                 }
             }
         }
+
+        // --- GÉPELÉS KEZELÉSÉHEZ ---
+        private bool _isOpponentTyping;
+        private DateTime _lastTypingSignalSent = DateTime.MinValue;
+        private Timer _typingTimer;
+
+        // --- Új "zár" a chat-küldés és a gépelés szinkronizálásához ---
+        private bool _isSendingChat = false;
 
         public ICommand SendChatCommand => _sendChatCommand ?? (_sendChatCommand = new RelayCommand(
             async () => await ExecuteSendChatAsync(),
@@ -73,6 +81,7 @@ namespace Amoba.ViewModel
         public int BoardSize { get => boardSize; set => Set(ref boardSize, value); }
         public int Player2Score { get => player2Score; set => Set(ref player2Score, value); }
         public int Player1Score { get => player1Score; set => Set(ref player1Score, value); }
+
         public bool IsPlayer1Turn { get => isPlayer1Turn; set => Set(ref isPlayer1Turn, value); }
         public bool IsPlayer2Turn
         {
@@ -89,6 +98,7 @@ namespace Amoba.ViewModel
                 }
             }
         }
+
         public bool IsNetworkGame { get => _isNetworkGame; set => Set(ref _isNetworkGame, value); }
         public bool AmIHost { get => _amIHost; set => Set(ref _amIHost, value); }
         public string OpponentName { get => _opponentName; set => Set(ref _opponentName, value); }
@@ -111,6 +121,15 @@ namespace Amoba.ViewModel
         public bool IsGameInProgress => !IsGameOver;
         public string GameOverMessage { get => _gameOverMessage; set => Set(ref _gameOverMessage, value); }
         public ObservableCollection<Place> Places { get => places; set => Set(ref places, value); }
+
+        /// <summary>
+        /// Igaz, ha az ellenfél épp gépel.
+        /// </summary>
+        public bool IsOpponentTyping
+        {
+            get => _isOpponentTyping;
+            set => Set(ref _isOpponentTyping, value);
+        }
 
         // --- PARANCSOK ---
         public ICommand SetImage
@@ -144,7 +163,7 @@ namespace Amoba.ViewModel
             _amIHost = isHostParam;
 
             // --- SAJÁT NÉV BEÁLLÍTÁSA ---
-            MyPlayerName = "JÁTÉKOS (X)"; // Alapértelmezett
+            MyPlayerName = "JÁTÉKOS (X)";
             if (isNetworkGameParam && !string.IsNullOrEmpty(myPlayerNameParam))
             {
                 MyPlayerName = myPlayerNameParam;
@@ -168,7 +187,8 @@ namespace Amoba.ViewModel
                 _networkService.RematchReceived += NetworkService_RematchReceived;
                 _networkService.OpponentLeft += NetworkService_OpponentLeft;
                 _networkService.LeaveAcknowledged += NetworkService_LeaveAcknowledged;
-                _networkService.ChatMessageReceived += NetworkService_ChatMessageReceived; // CHAT
+                _networkService.ChatMessageReceived += NetworkService_ChatMessageReceived;
+                _networkService.OpponentIsTyping += NetworkService_OpponentIsTyping;
             }
 
             // 3. TÁBLA INICIALIZÁLÁSA
@@ -177,6 +197,9 @@ namespace Amoba.ViewModel
             // 4. KÖR BEÁLLÍTÁSA (Alapértelmezett)
             IsPlayer1Turn = true;
             IsPlayer2Turn = false;
+
+            // 5. GÉPELÉS IDŐZÍTŐ INICIALIZÁLÁSA
+            _typingTimer = new Timer(OnTypingTimerElapsed, null, Timeout.Infinite, Timeout.Infinite);
         }
 
         private void InitializeViewModel(int boardSizeParam, bool isVsComputerMode)
@@ -261,10 +284,7 @@ namespace Amoba.ViewModel
 
                 if (!gameIsOver)
                 {
-                    // Ha a játék NEM ért véget (ez egy normál lépés volt):
-                    // 1. Játsszuk le a "Click" hangot
                     Messenger.Default.Send(new PlaySoundMessage { SoundName = "Click" });
-                    // 2. Váltsunk kört
                     ChangeTurn();
                 }
             }
@@ -296,8 +316,7 @@ namespace Amoba.ViewModel
             }
 
             GameResult result = GameLogic.CheckWinner(Places, BoardSize);
-            IconType winner = result.Winner; // Kiolvassuk a győztest
-
+            IconType winner = result.Winner;
             var isBoardFull = Places.All(p => !p.IsEmpty);
 
             if (winner != IconType.None || isBoardFull)
@@ -305,10 +324,8 @@ namespace Amoba.ViewModel
                 string title;
                 string message;
 
-                // --- GYŐZELMI LOGIKA ---
                 if (winner != IconType.None && result.WinningCellIDs.Any())
                 {
-                    // A kiemelést ASZINKRON módon végezzük, hogy időt adjunk a UI-nak
                     HighlightWinningCellsAsync(result.WinningCellIDs);
 
                     if (winner == IconType.Cross) // Játékos 1 (X) nyert
@@ -334,13 +351,11 @@ namespace Amoba.ViewModel
                     message = "A tábla megtelt!";
                 }
 
-                // Játék vége: Beállítjuk az állapotot és az üzenetet
                 TriggerGameOver(title, message);
-                return true; // A játék véget ért
+                return true;
             }
             else
             {
-                // Nincs győztes, a játék folytatódik
                 return false;
             }
         }
@@ -350,19 +365,16 @@ namespace Amoba.ViewModel
         /// </summary>
         private async void HighlightWinningCellsAsync(List<int> winningCellIDs)
         {
-            // Várakozás 50ms-ot (ez a Kliens oldalon kritikus)
             await Task.Delay(50);
 
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                // Végigmegyünk a győztes cellák ID-in
                 foreach (int id in winningCellIDs)
                 {
-                    // Megkeressük a Place objektumot az ID alapján
                     var winningPlace = Places.FirstOrDefault(p => p.Id == id);
                     if (winningPlace != null)
                     {
-                        winningPlace.IsWinningCell = true; // Ez aktiválja a kiemelést a XAML-ben
+                        winningPlace.IsWinningCell = true;
                     }
                 }
             });
@@ -379,6 +391,7 @@ namespace Amoba.ViewModel
             try
             {
                 Place bestMovePlace = aiPlayer.FindBestMove(Places, BoardSize);
+
                 if (bestMovePlace != null && bestMovePlace.IsEmpty)
                 {
                     bool gameIsOver = await ExecuteMove(bestMovePlace, IconType.Circle);
@@ -411,38 +424,70 @@ namespace Amoba.ViewModel
             (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
         }
 
+        /// <summary>
+        /// A View (code-behind) hívja meg, amikor a felhasználó gépel a chatboxba.
+        /// </summary>
+        public async void UserIsTyping()
+        {
+            // --- Ellenőrizzük a "küldés" zárat ---
+            // Ha épp egy másik üzenetet küldünk, ne próbáljunk "TYPING" jelzést küldeni
+            if (!IsNetworkGame || _isSendingChat) return;
+
+            // "Throttling" (Korlátozás):
+            if (DateTime.Now - _lastTypingSignalSent > TimeSpan.FromSeconds(2))
+            {
+                try
+                {
+                    await _networkService.SendTypingIndicatorAsync();
+                    _lastTypingSignalSent = DateTime.Now;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Hiba a 'Typing' jelzés küldésekor: {ex.Message}");
+                }
+            }
+        }
+
         private async Task ExecuteSendChatAsync()
         {
-            if (!IsNetworkGame || string.IsNullOrWhiteSpace(ChatMessageInput))
+            // --- Beállítjuk a "küldés" zárat ---
+            if (!IsNetworkGame || string.IsNullOrWhiteSpace(ChatMessageInput) || _isSendingChat)
             {
                 return;
             }
 
+            _isSendingChat = true; // <-- ZÁROLÁS
+
             string messageToSend = ChatMessageInput;
-            ChatMessageInput = string.Empty;
+            ChatMessageInput = string.Empty; // Ez váltja ki a TextChanged -> UserIsTyping hívást
 
             try
             {
+                // 1. Elküldjük a hálózaton
                 await _networkService.SendChatMessageAsync(messageToSend);
 
+                // (Opcionális: A "épp ír..." jelzést is leállíthatjuk)
+                _typingTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                IsOpponentTyping = false;
+
+                // 2. Hozzáadjuk a saját előzményeinkhez
                 ChatHistory.Add(new ChatMessage
                 {
                     Author = MyPlayerName,
                     Message = messageToSend,
-                    IsMine = true, // Ez a saját üzenetünk
+                    IsMine = true,
                     Timestamp = DateTime.Now
                 });
             }
             catch (Exception ex)
             {
-                ChatMessageInput = messageToSend;
-                ChatHistory.Add(new ChatMessage
-                {
-                    Author = "Hiba",
-                    Message = $"Küldés sikertelen: {ex.Message}",
-                    IsMine = true,
-                    Timestamp = DateTime.Now
-                });
+                // A chat-küldési hibát most már "fatális" hibaként kezeljük
+                Debug.WriteLine($"Hiba a Chat küldésekor (ExecuteSendChatAsync): {ex.Message}");
+                HandleDisconnection("Chat-üzenet küldése sikertelen.");
+            }
+            finally
+            {
+                _isSendingChat = false; // <-- FELOLDÁS
             }
         }
 
@@ -450,18 +495,12 @@ namespace Amoba.ViewModel
         // --- HÁLÓZATI ESEMÉNYKEZELŐK ÉS TAKARÍTÁS ---
         // ===================================================================
 
-        // Ez a metódus a Host oldalon már nem fog lefutni (mert a GameSizeViewModel
-        // előbb érkezik), de a Kliens oldalon igen (bár ott az OpponentName
-        // már a konstruktorban beállítódik).
-        // A biztonság kedvéért itt hagyjuk, de a fő logika már a konstruktorban van.
         private void NetworkService_GameStarted(object sender, GameStartedEventArgs e)
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 try
                 {
-                    // Ha az OpponentName valamiért még üres lenne,
-                    // ez a Kliens oldalon beállítja.
                     if (string.IsNullOrEmpty(OpponentName) && !e.IsHost)
                     {
                         OpponentName = e.OpponentName;
@@ -560,9 +599,20 @@ namespace Amoba.ViewModel
         /// <summary>
         /// Akkor fut le, ha az ellenfél nyomta meg a "Főmenü" gombot (kulturált kilépés).
         /// </summary>
-        private void NetworkService_OpponentLeft(object sender, EventArgs e)
+        private async void NetworkService_OpponentLeft(object sender, EventArgs e)
         {
             Debug.WriteLine("Ellenfél 'Főmenübe lépés' kérés fogadva (OpponentLeft). Dialógus megjelenítése...");
+
+            try
+            {
+                await _networkService.SendLeaveAckAsync();
+            }
+            catch (Exception ex)
+            {
+                // Nem baj, ha ez hibát dob, valószínűleg a kapcsolat már amúgy is bontva van.
+                Debug.WriteLine($"Hiba a LEAVE_ACK küldésekor (OpponentLeft): {ex.Message}");
+            }
+
             ShowDisconnectionErrorAsync("Játék Vége", "Az ellenfél kilépett a főmenübe.");
         }
 
@@ -570,13 +620,44 @@ namespace Amoba.ViewModel
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
+                // JAVÍTÁS: Az üzenet megérkezett, leállítjuk a "gépel" jelzést
+                _typingTimer.Change(Timeout.Infinite, Timeout.Infinite);
+                IsOpponentTyping = false;
+
                 ChatHistory.Add(new ChatMessage
                 {
                     Author = OpponentName,
                     Message = messageText,
-                    IsMine = false, // Ez az ellenfél üzenete
+                    IsMine = false,
                     Timestamp = DateTime.Now
                 });
+            });
+        }
+
+        /// <summary>
+        /// Akkor fut le, ha az ellenfél gépel.
+        /// </summary>
+        private void NetworkService_OpponentIsTyping(object sender, EventArgs e)
+        {
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                // 1. Állítsuk be, hogy az ellenfél gépel (a UI-nak)
+                IsOpponentTyping = true;
+
+                // 2. Indítsuk újra a 3 másodperces időzítőt
+                _typingTimer.Change(TimeSpan.FromSeconds(3), Timeout.InfiniteTimeSpan);
+            });
+        }
+
+        /// <summary>
+        /// Akkor fut le, ha a 3 másodperces "épp ír" időzítő lejárt.
+        /// </summary>
+        private void OnTypingTimerElapsed(object state)
+        {
+            // Leállítjuk a gépelési jelzést a UI-n
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                IsOpponentTyping = false;
             });
         }
 
@@ -598,7 +679,7 @@ namespace Amoba.ViewModel
             {
                 lock (_gameOverLock)
                 {
-                    if (IsGameOver) return; // Már lekezeltük
+                    if (IsGameOver) return;
                     IsGameOver = true;
                 }
 
@@ -615,7 +696,6 @@ namespace Amoba.ViewModel
         {
             bool shouldNavigate = false;
 
-            // 1. Atomikusan ellenőrizzük és beállítjuk a navigációs zárat
             lock (_gameOverLock)
             {
                 if (!_isNavigatingToMenu)
@@ -635,10 +715,8 @@ namespace Amoba.ViewModel
                 return;
             }
 
-            // 3. A Cleanup() gondoskodik a Disconnect-ről és a leiratkozásokról
             Cleanup();
 
-            // 4. A navigációt és az előzmények törlését a UI szálon végezzük
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 try
@@ -674,21 +752,19 @@ namespace Amoba.ViewModel
 
                 try
                 {
-                    // 2. Esetlegesen nyitva lévő (régi) dialógus bezárása
                     if (_activeGameOverDialog != null)
                     {
                         _activeGameOverDialog.Hide();
                         _activeGameOverDialog = null;
                     }
 
-                    // 3. HIBAÜZENET MEGJELENÍTÉSE
                     var dialog = new ContentDialog
                     {
                         Title = title,
                         Content = content,
                         PrimaryButtonText = "OK (Főmenü)"
                     };
-                    await dialog.ShowAsync(); // Várjuk meg, amíg a felhasználó le-OK-zza
+                    await dialog.ShowAsync();
                 }
                 catch (Exception ex)
                 {
@@ -696,7 +772,6 @@ namespace Amoba.ViewModel
                 }
                 finally
                 {
-                    // 4. NAVIGÁLÁS A FŐMENÜBE
                     GoToMainMenu();
                 }
             });
@@ -730,7 +805,7 @@ namespace Amoba.ViewModel
                     foreach (var place in Places)
                     {
                         place.Type = IconType.None;
-                        place.IsWinningCell = false;
+                        place.IsWinningCell = false; // Győztes cellák törlése
                     }
 
                     // 3. KÖRÖK VISSZAÁLLÍTÁSA
@@ -765,6 +840,7 @@ namespace Amoba.ViewModel
             if (_networkService != null)
             {
                 // Az összes eseményről leiratkozunk
+
                 _networkService.GameStarted -= NetworkService_GameStarted;
                 _networkService.MoveReceived -= NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
@@ -773,8 +849,14 @@ namespace Amoba.ViewModel
                 _networkService.LeaveAcknowledged -= NetworkService_LeaveAcknowledged;
                 _networkService.ChatMessageReceived -= NetworkService_ChatMessageReceived;
 
+                _networkService.OpponentIsTyping -= NetworkService_OpponentIsTyping;
+
                 _networkService.Disconnect();
             }
+
+            // Az időzítőt is megsemmisítjük
+            _typingTimer?.Dispose();
+
             base.Cleanup();
         }
     }

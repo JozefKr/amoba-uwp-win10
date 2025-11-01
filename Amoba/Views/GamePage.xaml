@@ -333,12 +333,10 @@
                   MaxWidth="800"
                   Visibility="{Binding IsNetworkGame, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <!-- Cím -->
-                    <RowDefinition Height="*"/>
-                    <!-- Előzmények (Kitölti a maradék helyet) -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- Beviteli mező -->
+                    <RowDefinition Height="Auto"/> <!-- Cím -->
+                    <RowDefinition Height="*"/> <!-- Előzmények -->
+                    <RowDefinition Height="Auto"/> <!-- Gépelési jelző -->
+                    <RowDefinition Height="Auto"/> <!-- Beviteli mező -->
                 </Grid.RowDefinitions>
 
                 <!-- Chat Cím -->
@@ -377,8 +375,17 @@
                     </ListView.ItemTemplate>
                 </ListView>
 
+                <TextBlock Grid.Row="2" 
+                           Margin="5,2,5,2"
+                           FontStyle="Italic"
+                           Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                           Visibility="{Binding IsOpponentTyping, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Run Text="{Binding OpponentName, FallbackValue='Ellenfél'}"/>
+                    <Run Text=" épp ír..."/>
+                </TextBlock>
+
                 <!-- Beviteli Mező és Gomb -->
-                <Grid Grid.Row="2" Margin="0,10,0,0">
+                <Grid Grid.Row="3" Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -390,7 +397,8 @@
                              Text="{Binding ChatMessageInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                              VerticalAlignment="Center"
                              Margin="0,0,5,0"
-                             KeyUp="ChatInputBox_KeyUp"/>
+                             KeyUp="ChatInputBox_KeyUp"
+                             TextChanged="ChatInputBox_TextChanged"/>
 
                     <Button Grid.Column="1"
                             x:Name="SendChatButton"
