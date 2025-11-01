@@ -127,6 +127,7 @@
     <Compile Include="Converters\TurnToColorConverter.cs" />
     <Compile Include="Messages\PlaySoundMessage.cs" />
     <Compile Include="Model\ChatMessage.cs" />
+    <Compile Include="Model\GameResult.cs" />
     <Compile Include="Model\GameType.cs" />
     <Compile Include="Model\IconType.cs" />
     <Compile Include="Model\Place.cs" />

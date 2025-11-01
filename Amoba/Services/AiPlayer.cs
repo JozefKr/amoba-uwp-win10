@@ -1,5 +1,4 @@
 ﻿using Amoba.Model;
-using Amoba.ViewModel; // Szükséges a GameLogic eléréséhez
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -79,9 +78,8 @@ namespace Amoba.Services
         /// <returns>Az adott táblaállás értékelése.</returns>
         private int Minimax(IconType[] board, int boardSize, int depth, bool isMaximizing, int alpha, int beta)
         {
-            // --- GameLogic hívása az IconType[] tömbhöz ---
-            // Ehhez létre kell hozni egy új CheckWinner overloadot a GameLogic-ban!
-            IconType winner = GameLogic.CheckWinner(board, boardSize); // ÚJ OVERLOAD SZÜKSÉGES!
+            GameResult result = GameLogic.CheckWinner(board, boardSize);
+            IconType winner = result.Winner;
 
             // Alap esetek: Terminális állapotok
             if (winner == IconType.Circle) return WIN_SCORE - depth; // AI nyert

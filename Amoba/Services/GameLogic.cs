@@ -5,10 +5,18 @@ namespace Amoba.Services
 {
     public static class GameLogic
     {
-        // 1. VERZIÓ: ViewModel használja. ObservableCollection is kompatibilis.
-        public static IconType CheckWinner(IReadOnlyList<Place> places, int boardSize)
+        // ===================================================================
+        // --- VERZIÓ 1: GameViewModel használja ---
+        // ===================================================================
+
+        /// <summary>
+        /// Ellenőrzi a táblát, és visszaadja a győztest,
+        /// VALAMINT a győztes cellák listáját.
+        /// </summary>
+        public static GameResult CheckWinner(IReadOnlyList<Place> places, int boardSize)
         {
-            if (places == null || places.Count != boardSize * boardSize) return IconType.None;
+            if (places == null || places.Count != boardSize * boardSize)
+                return new GameResult(); // Alapértelmezett (Nincs győztes)
 
             // Sorok ellenőrzése
             for (int row = 0; row < boardSize; row++)
@@ -25,7 +33,16 @@ namespace Amoba.Services
                             break;
                         }
                     }
-                    if (win) return firstType;
+                    if (win)
+                    {
+                        // Visszaadjuk a teljes eredményt
+                        var result = new GameResult { Winner = firstType };
+                        for (int c = 0; c < boardSize; c++)
+                        {
+                            result.WinningCellIDs.Add(row * boardSize + c);
+                        }
+                        return result;
+                    }
                 }
             }
 
@@ -44,7 +61,16 @@ namespace Amoba.Services
                             break;
                         }
                     }
-                    if (win) return firstType;
+                    if (win)
+                    {
+                        // Visszaadjuk a teljes eredményt
+                        var result = new GameResult { Winner = firstType };
+                        for (int r = 0; r < boardSize; r++)
+                        {
+                            result.WinningCellIDs.Add(r * boardSize + col);
+                        }
+                        return result;
+                    }
                 }
             }
 
@@ -61,7 +87,16 @@ namespace Amoba.Services
                         break;
                     }
                 }
-                if (win) return mainDiagType;
+                if (win)
+                {
+                    // Visszaadjuk a teljes eredményt
+                    var result = new GameResult { Winner = mainDiagType };
+                    for (int i = 0; i < boardSize; i++)
+                    {
+                        result.WinningCellIDs.Add(i * boardSize + i);
+                    }
+                    return result;
+                }
             }
 
             // Mellékátló (jobb fent -> bal lent)
@@ -77,16 +112,34 @@ namespace Amoba.Services
                         break;
                     }
                 }
-                if (win) return antiDiagType;
+                if (win)
+                {
+                    // Visszaadjuk a teljes eredményt
+                    var result = new GameResult { Winner = antiDiagType };
+                    for (int i = 0; i < boardSize; i++)
+                    {
+                        result.WinningCellIDs.Add(i * boardSize + (boardSize - 1 - i));
+                    }
+                    return result;
+                }
             }
 
-            return IconType.None;
+            // Alapértelmezett GameResult visszaadása
+            return new GameResult();
         }
 
-        // 2. VERZIÓ: AI használja. Optimalizálva IconType[] tömbhöz.
-        public static IconType CheckWinner(IconType[] board, int boardSize)
+        // ===================================================================
+        // --- VERZIÓ 2: AI használja ---
+        // ===================================================================
+
+        /// <summary>
+        /// Ellenőrzi a táblát, és visszaadja a győztest,
+        /// VALAMINT a győztes cellák listáját. (AI verzió)
+        /// </summary>
+        public static GameResult CheckWinner(IconType[] board, int boardSize)
         {
-            if (board == null || board.Length != boardSize * boardSize) return IconType.None;
+            if (board == null || board.Length != boardSize * boardSize)
+                return new GameResult();
 
             // Sorok
             for (int row = 0; row < boardSize; row++)
@@ -99,7 +152,15 @@ namespace Amoba.Services
                     {
                         if (board[row * boardSize + col] != first) { win = false; break; }
                     }
-                    if (win) return first;
+                    if (win)
+                    {
+                        var result = new GameResult { Winner = first };
+                        for (int c = 0; c < boardSize; c++)
+                        {
+                            result.WinningCellIDs.Add(row * boardSize + c);
+                        }
+                        return result;
+                    }
                 }
             }
             // Oszlopok
@@ -113,7 +174,15 @@ namespace Amoba.Services
                     {
                         if (board[row * boardSize + col] != first) { win = false; break; }
                     }
-                    if (win) return first;
+                    if (win)
+                    {
+                        var result = new GameResult { Winner = first };
+                        for (int r = 0; r < boardSize; r++)
+                        {
+                            result.WinningCellIDs.Add(r * boardSize + col);
+                        }
+                        return result;
+                    }
                 }
             }
             // Főátló
@@ -125,7 +194,15 @@ namespace Amoba.Services
                 {
                     if (board[i * boardSize + i] != mainDiag) { win = false; break; }
                 }
-                if (win) return mainDiag;
+                if (win)
+                {
+                    var result = new GameResult { Winner = mainDiag };
+                    for (int i = 0; i < boardSize; i++)
+                    {
+                        result.WinningCellIDs.Add(i * boardSize + i);
+                    }
+                    return result;
+                }
             }
             // Mellékátló
             IconType antiDiag = board[boardSize - 1];
@@ -136,9 +213,18 @@ namespace Amoba.Services
                 {
                     if (board[i * boardSize + (boardSize - 1 - i)] != antiDiag) { win = false; break; }
                 }
-                if (win) return antiDiag;
+                if (win)
+                {
+                    var result = new GameResult { Winner = antiDiag };
+                    for (int i = 0; i < boardSize; i++)
+                    {
+                        result.WinningCellIDs.Add(i * boardSize + (boardSize - 1 - i));
+                    }
+                    return result;
+                }
             }
-            return IconType.None;
+
+            return new GameResult();
         }
     }
 }

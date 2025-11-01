@@ -13,6 +13,7 @@ using System.Windows.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls; // Szükséges a ContentDialog-hoz
 using Amoba.Messages;
+using System.Collections.Generic;
 
 namespace Amoba.ViewModel
 {
@@ -31,12 +32,11 @@ namespace Amoba.ViewModel
         private ICommand newGameCommand;
         private int boardSize;
         private AiPlayer aiPlayer;
-        private bool _isGameOver; // Ez jelzi, ha a ShowGameOverDialogAsync már fut
+        private bool _isGameOver;
         private string _gameOverMessage;
-        private readonly IViewService _viewService; // A Főmenübe navigáláshoz
+        private readonly IViewService _viewService;
         private ContentDialog _activeGameOverDialog = null;
         private readonly object _gameOverLock = new object();
-        // Ez fogja jelezni, ha megérkezett a LEAVE_ACK
         private TaskCompletionSource<bool> _leaveAckTcs;
         private bool _isNavigatingToMenu = false;
         private ICommand _mainMenuCommand;
@@ -73,7 +73,6 @@ namespace Amoba.ViewModel
         public int BoardSize { get => boardSize; set => Set(ref boardSize, value); }
         public int Player2Score { get => player2Score; set => Set(ref player2Score, value); }
         public int Player1Score { get => player1Score; set => Set(ref player1Score, value); }
-
         public bool IsPlayer1Turn { get => isPlayer1Turn; set => Set(ref isPlayer1Turn, value); }
         public bool IsPlayer2Turn
         {
@@ -90,7 +89,6 @@ namespace Amoba.ViewModel
                 }
             }
         }
-
         public bool IsNetworkGame { get => _isNetworkGame; set => Set(ref _isNetworkGame, value); }
         public bool AmIHost { get => _amIHost; set => Set(ref _amIHost, value); }
         public string OpponentName { get => _opponentName; set => Set(ref _opponentName, value); }
@@ -106,12 +104,10 @@ namespace Amoba.ViewModel
             {
                 if (Set(ref _isGameOver, value))
                 {
-                    // Értesítjük a UI-t, hogy az inverz property is változott
                     RaisePropertyChanged(nameof(IsGameInProgress));
                 }
             }
         }
-        // Ez az IsGameOver fordítottja. Akkor true, amikor a játék Még FOLYIK.
         public bool IsGameInProgress => !IsGameOver;
         public string GameOverMessage { get => _gameOverMessage; set => Set(ref _gameOverMessage, value); }
         public ObservableCollection<Place> Places { get => places; set => Set(ref places, value); }
@@ -121,14 +117,12 @@ namespace Amoba.ViewModel
         {
             get => setImage ?? (setImage = new RelayCommand<Place>(
                 SetImageMethod,
-                // CanExecute: Csak akkor engedélyezett, ha a játék NEM ért véget,
-                // a mező üres, és a helyi/hálózati körünk van.
                 p => p != null && p.IsEmpty &&
                      !isProcessingAiMove &&
-                     !IsGameOver && // Ne engedjünk lépni, ha a dialógus már aktív
+                     !IsGameOver &&
                      (
-                        (!IsNetworkGame && (IsPlayer1Turn || (IsPlayer2Turn && !isVsComputer))) ||
-                        (IsNetworkGame && ((AmIHost && IsPlayer1Turn) || (!AmIHost && IsPlayer2Turn)))
+                         (!IsNetworkGame && (IsPlayer1Turn || (IsPlayer2Turn && !isVsComputer))) ||
+                         (IsNetworkGame && ((AmIHost && IsPlayer1Turn) || (!AmIHost && IsPlayer2Turn)))
                      )
             ));
         }
@@ -140,14 +134,12 @@ namespace Amoba.ViewModel
         // ===================================================================
 
         public GameViewModel(IViewService viewService, int boardSizeParam, bool isVsComputerParam,
-                     bool isNetworkGameParam, bool isHostParam, INetworkService networkService,
-                     string myPlayerNameParam = null,
-                     string opponentNameParam = null)
+                             bool isNetworkGameParam, bool isHostParam, INetworkService networkService,
+                             string myPlayerNameParam = null,
+                             string opponentNameParam = null)
         {
             _viewService = viewService;
             _networkService = networkService;
-
-            // 1. ÁLLAPOTOK BEÁLLÍTÁSA A PARAMÉTEREKBŐL
             _isNetworkGame = isNetworkGameParam;
             _amIHost = isHostParam;
 
@@ -155,15 +147,10 @@ namespace Amoba.ViewModel
             MyPlayerName = "JÁTÉKOS (X)"; // Alapértelmezett
             if (isNetworkGameParam && !string.IsNullOrEmpty(myPlayerNameParam))
             {
-                // Ha hálózati játék, és kaptunk nevet, felülírjuk
                 MyPlayerName = myPlayerNameParam;
             }
 
-            // =======================================================
-            // EGYSÉGES ELLENFÉL NÉV BEÁLLÍTÁS ---
-            // =======================================================
-            // Mindegy, hogy Host vagy Kliens, ha kaptunk opponentNameParam-ot
-            // a navigáció során, akkor azt használjuk.
+            // --- EGYSÉGES ELLENFÉL NÉV BEÁLLÍTÁS ---
             if (!string.IsNullOrEmpty(opponentNameParam))
             {
                 OpponentName = opponentNameParam;
@@ -178,7 +165,7 @@ namespace Amoba.ViewModel
                 _networkService.GameStarted += NetworkService_GameStarted;
                 _networkService.MoveReceived += NetworkService_MoveReceived;
                 _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
-                _networkService.RematchReceived += NetworkService_RematchReceived; // VISSZAVÁGÓ FOGADÁSA
+                _networkService.RematchReceived += NetworkService_RematchReceived;
                 _networkService.OpponentLeft += NetworkService_OpponentLeft;
                 _networkService.LeaveAcknowledged += NetworkService_LeaveAcknowledged;
                 _networkService.ChatMessageReceived += NetworkService_ChatMessageReceived; // CHAT
@@ -188,8 +175,6 @@ namespace Amoba.ViewModel
             InitializeViewModel(boardSizeParam, isVsComputerParam);
 
             // 4. KÖR BEÁLLÍTÁSA (Alapértelmezett)
-            // Helyi/AI módban P1 kezd.
-            // Hálózati módban a GameStarted esemény ezt felülírja.
             IsPlayer1Turn = true;
             IsPlayer2Turn = false;
         }
@@ -236,7 +221,6 @@ namespace Amoba.ViewModel
             }
 
             // 2. A küldő is alaphelyzetbe állítja a saját tábláját
-            // (A pontszámokat NEM nullázzuk)
             ResetBoard();
         }
 
@@ -250,8 +234,6 @@ namespace Amoba.ViewModel
                     _leaveAckTcs = new TaskCompletionSource<bool>();
                     Debug.WriteLine("ExecuteMainMenu: LEAVE üzenet küldése...");
                     await _networkService.SendLeaveGameAsync();
-
-                    // Várunk a nyugtára VAGY időtúllépésre
                     await Task.WhenAny(_leaveAckTcs.Task, Task.Delay(2000));
 
                     if (_leaveAckTcs.Task.IsCompleted)
@@ -261,16 +243,10 @@ namespace Amoba.ViewModel
                 }
                 catch (Exception ex)
                 {
-                    // Ha a kulturált kilépés (LEAVE küldése) hibát dob, az NEM VÁRATLAN HIBA.
-                    // A szándékunk továbbra is a Főmenübe lépés.
-                    // Egyszerűen naplózzuk a hibát, és hagyjuk, hogy a kód
-                    // tovább fusson a 'GoToMainMenu()' hívásra.
                     Debug.WriteLine($"Hiba a 'Leave' küldésekor (elkapva, de figyelmen kívül hagyva): {ex.Message}");
                 }
             }
 
-            // Ha nem hálózati játék, VAGY a hálózati küldés sikeres volt (nem dobott hibát),
-            // akkor a normál GoToMainMenu-t hívjuk.
             GoToMainMenu();
         }
 
@@ -281,24 +257,16 @@ namespace Amoba.ViewModel
                 if (place == null || !place.IsEmpty) return;
                 IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
 
-                // A ChangeTurn() hívása az ExecuteMove-ból kikerült
                 bool gameIsOver = await ExecuteMove(place, iconToUse);
 
                 if (!gameIsOver)
                 {
-                    // =======================================================
                     // Ha a játék NEM ért véget (ez egy normál lépés volt):
-
                     // 1. Játsszuk le a "Click" hangot
                     Messenger.Default.Send(new PlaySoundMessage { SoundName = "Click" });
-
                     // 2. Váltsunk kört
                     ChangeTurn();
-                    // =======================================================
                 }
-                // Ha a gameIsOver == true, akkor NEM küldünk "Click" hangot,
-                // mert a 'TriggerGameOver' metódus (amit az 'ExecuteMove' hívott)
-                // már elküldte a "Win" vagy "Lose" hangot.
             }
             catch (Exception ex)
             {
@@ -327,7 +295,9 @@ namespace Amoba.ViewModel
                 }
             }
 
-            var winner = GameLogic.CheckWinner(Places, BoardSize);
+            GameResult result = GameLogic.CheckWinner(Places, BoardSize);
+            IconType winner = result.Winner; // Kiolvassuk a győztest
+
             var isBoardFull = Places.All(p => !p.IsEmpty);
 
             if (winner != IconType.None || isBoardFull)
@@ -335,37 +305,28 @@ namespace Amoba.ViewModel
                 string title;
                 string message;
 
-                if (winner == IconType.Cross) // Játékos 1 (X) nyert
+                // --- GYŐZELMI LOGIKA ---
+                if (winner != IconType.None && result.WinningCellIDs.Any())
                 {
-                    // A cím (Title) a te nézőpontodból (EZ MÁR JÓ VOLT)
-                    title = (!IsNetworkGame || AmIHost) ? "Győzelem!" : "Vereség!";
+                    // A kiemelést ASZINKRON módon végezzük, hogy időt adjunk a UI-nak
+                    HighlightWinningCellsAsync(result.WinningCellIDs);
 
-                    // =======================================================
-                    // Megnézzük, ki az X.
-                    // Ha helyi játék VAGY én vagyok a Host, akkor én (MyPlayerName) vagyok az X.
-                    // Különben az ellenfél (OpponentName) az X.
-                    // =======================================================
-                    message = (!IsNetworkGame || AmIHost)
-                                ? $"{MyPlayerName} Nyert!"
-                                : $"{OpponentName} Nyert!";
-
-                    Player1Score++;
-                }
-                else if (winner == IconType.Circle) // Játékos 2 (O) nyert
-                {
-                    // A cím (Title) a te nézőpontodból (EZ MÁR JÓ VOLT)
-                    title = (IsNetworkGame && !AmIHost) ? "Győzelem!" : "Vereség!";
-
-                    // =======================================================
-                    // Megnézzük, ki az O.
-                    // Ha helyi játék VAGY én vagyok a Host, akkor az ellenfél (OpponentName) az O.
-                    // Különben (ha Kliens vagyok) én (MyPlayerName) vagyok az O.
-                    // =======================================================
-                    message = (!IsNetworkGame || AmIHost)
-                                ? $"{OpponentName} Nyert!"
-                                : $"{MyPlayerName} Nyert!";
-
-                    Player2Score++;
+                    if (winner == IconType.Cross) // Játékos 1 (X) nyert
+                    {
+                        title = (!IsNetworkGame || AmIHost) ? "Győzelem!" : "Vereség!";
+                        message = (!IsNetworkGame || AmIHost)
+                                    ? $"{MyPlayerName} Nyert!"
+                                    : $"{OpponentName} Nyert!";
+                        Player1Score++;
+                    }
+                    else // Játékos 2 (O) nyert
+                    {
+                        title = (IsNetworkGame && !AmIHost) ? "Győzelem!" : "Vereség!";
+                        message = (!IsNetworkGame || AmIHost)
+                                    ? $"{OpponentName} Nyert!"
+                                    : $"{MyPlayerName} Nyert!";
+                        Player2Score++;
+                    }
                 }
                 else // Döntetlen
                 {
@@ -382,6 +343,29 @@ namespace Amoba.ViewModel
                 // Nincs győztes, a játék folytatódik
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Késleltetett kiemelést végez. Ez ad időt a Kliens UI-nak a frissítésre.
+        /// </summary>
+        private async void HighlightWinningCellsAsync(List<int> winningCellIDs)
+        {
+            // Várakozás 50ms-ot (ez a Kliens oldalon kritikus)
+            await Task.Delay(50);
+
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                // Végigmegyünk a győztes cellák ID-in
+                foreach (int id in winningCellIDs)
+                {
+                    // Megkeressük a Place objektumot az ID alapján
+                    var winningPlace = Places.FirstOrDefault(p => p.Id == id);
+                    if (winningPlace != null)
+                    {
+                        winningPlace.IsWinningCell = true; // Ez aktiválja a kiemelést a XAML-ben
+                    }
+                }
+            });
         }
 
         private async void TriggerAiMove()
@@ -435,16 +419,12 @@ namespace Amoba.ViewModel
             }
 
             string messageToSend = ChatMessageInput;
-
-            // Beviteli mező azonnali törlése
             ChatMessageInput = string.Empty;
 
             try
             {
-                // 1. Elküldjük a hálózaton
                 await _networkService.SendChatMessageAsync(messageToSend);
 
-                // 2. Hozzáadjuk a saját előzményeinkhez
                 ChatHistory.Add(new ChatMessage
                 {
                     Author = MyPlayerName,
@@ -455,7 +435,6 @@ namespace Amoba.ViewModel
             }
             catch (Exception ex)
             {
-                // Hiba esetén visszaállítjuk a szöveget, hogy újra próbálhassa
                 ChatMessageInput = messageToSend;
                 ChatHistory.Add(new ChatMessage
                 {
@@ -471,36 +450,30 @@ namespace Amoba.ViewModel
         // --- HÁLÓZATI ESEMÉNYKEZELŐK ÉS TAKARÍTÁS ---
         // ===================================================================
 
-        /// <summary>
-        /// Ez az eseménykezelő fut le, amikor a hálózati játék ténylegesen elindul.
-        /// Beállítja a szerepeket (Host/Kliens) és az ellenfél nevét.
-        /// </summary>
+        // Ez a metódus a Host oldalon már nem fog lefutni (mert a GameSizeViewModel
+        // előbb érkezik), de a Kliens oldalon igen (bár ott az OpponentName
+        // már a konstruktorban beállítódik).
+        // A biztonság kedvéért itt hagyjuk, de a fő logika már a konstruktorban van.
         private void NetworkService_GameStarted(object sender, GameStartedEventArgs e)
         {
-            // A CheckBeginInvokeOnUI egy háttérszálról hívódhat meg.
-            // A benne lévő kódnak "golyóállónak" kell lennie.
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 try
                 {
-                    // 1. Állapot frissítése (IsNetworkGame már true)
-                    AmIHost = e.IsHost; // Megerősíti a szerepkört
-                    OpponentName = e.OpponentName; // Beállítja a nevet
+                    // Ha az OpponentName valamiért még üres lenne,
+                    // ez a Kliens oldalon beállítja.
+                    if (string.IsNullOrEmpty(OpponentName) && !e.IsHost)
+                    {
+                        OpponentName = e.OpponentName;
+                    }
 
-                    // 2. KÖR BEÁLLÍTÁSA: A HOST KEZD!
-                    IsPlayer1Turn = e.IsHost; // Ha én vagyok a Host (X), én kezdek.
-                    IsPlayer2Turn = !e.IsHost; // Ha én vagyok a Kliens (O), az ellenfél (X) jön.
-
-                    // 3. CANEXECUTE FRISSÍTÉSE (Ez a kulcs!)
-                    // Frissítjük a gombok állapotát az új kör alapján.
+                    AmIHost = e.IsHost;
+                    IsPlayer1Turn = e.IsHost;
+                    IsPlayer2Turn = !e.IsHost;
                     (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
                 }
                 catch (Exception ex)
                 {
-                    // 4. HIBAKEZELÉS
-                    // Ha bármi hiba történik a játék indításakor
-                    // (pl. a CanExecute logikája hibát dob),
-                    // azt itt elkapjuk és kulturáltan leállítjuk a játékot.
                     Debug.WriteLine($"FATALIS Hiba a NetworkService_GameStarted feldolgozása közben: {ex.Message}");
                     HandleDisconnection("Kritikus hiba a játék indításakor.");
                 }
@@ -512,15 +485,10 @@ namespace Amoba.ViewModel
         {
             try
             {
-                // Csak akkor dolgozzuk fel a lépést, ha az ellenfél volt soron.
-                // Ha én vagyok a Host (X) és a Játékos 2 (O) volt soron, VAGY
-                // ha én vagyok a Kliens (O) és a Játékos 1 (X) volt soron.
+                // [CSALÁS-VÉDELEM]
                 bool isOpponentsTurn = (AmIHost && IsPlayer2Turn) || (!AmIHost && IsPlayer1Turn);
-
                 if (!isOpponentsTurn)
                 {
-                    // Csalási kísérlet vagy hálózati deszinkronizáció.
-                    // Csendben figyelmen kívül hagyjuk a lépést.
                     Debug.WriteLine($"[CSALÁS-VÉDELEM] Lépés fogadva, de nem az ellenfél volt soron. Lépés eldobva.");
                     return;
                 }
@@ -548,53 +516,35 @@ namespace Amoba.ViewModel
 
         /// <summary>
         /// Akkor fut le, ha az ellenfél nyomta meg az "Új Játék" gombot.
-        /// Bezárja a helyi dialógust és alaphelyzetbe állítja a táblát.
         /// </summary>
         private void NetworkService_RematchReceived(object sender, EventArgs e)
         {
-            // A DispatcherHelper.CheckBeginInvokeOnUI egy UI-szálra küldött "fire-and-forget" hívás.
-            // Bármilyen kivétel, ami a lambda-n belül történik, kezeletlen marad
-            // és összeomlasztja az alkalmazást. Ezért a teljes belső logikát
-            // try-catch blokkba kell tenni.
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 try
                 {
                     Debug.WriteLine("Visszavágó kérés fogadva, tábla törlése...");
-                    //Player1Score = 0;
-                    //Player2Score = 0;
 
-                    // 1. Dialógus bezárása
-                    // Bezárjuk a "Győzelem/Vereség" dialógust, hogy a tábla láthatóvá váljon.
                     if (_activeGameOverDialog != null)
                     {
                         _activeGameOverDialog.Hide();
                         _activeGameOverDialog = null;
                     }
 
-                    // 2. Helyi visszaállítás
-                    // A ResetBoard() metódus (ami szintén a UI szálon fut)
-                    // elvégzi a tábla törlését és a körök visszaállítását P1-re.
                     ResetBoard();
                 }
                 catch (Exception ex)
                 {
-                    // 3. Vészhelyzeti hibakezelés
-                    // Elkapja, ha pl. a .Hide() vagy a ResetBoard() hibát dob
                     Debug.WriteLine($"FATALIS Hiba a RematchReceived feldolgozása közben: {ex.Message}");
-
-                    // Ha a reset meghiúsul, valami nagyon elromlott.
-                    // A legbiztonságosabb, ha visszaküldjük a felhasználót a főmenübe.
                     GoToMainMenu();
                 }
             });
         }
 
-        // Ez oldja fel a várakozást a ShowGameOverDialogAsync-ban
+        // Ez oldja fel a várakozást a 'ExecuteMainMenuAsync'-ban
         private void NetworkService_LeaveAcknowledged(object sender, EventArgs e)
         {
             Debug.WriteLine("LEAVE_ACK nyugta fogadva.");
-            // Jelezzük a TaskCompletionSource-nak, hogy megérkezett a válasz
             _leaveAckTcs?.TrySetResult(true);
         }
 
@@ -603,8 +553,6 @@ namespace Amoba.ViewModel
         /// </summary>
         private void NetworkService_OpponentDisconnected(object sender, EventArgs e)
         {
-            // Ez egy VÁRATLAN hiba (a kapcsolat váratlanul lezárult).
-            // Mutatunk egy felugró ablakot.
             Debug.WriteLine("VÁRATLAN kapcsolatbontás (OpponentDisconnected).");
             ShowDisconnectionErrorAsync("Kapcsolat Megszakadt", $"Az ellenfél ({OpponentName}) váratlanul bontotta a kapcsolatot.");
         }
@@ -614,16 +562,7 @@ namespace Amoba.ViewModel
         /// </summary>
         private void NetworkService_OpponentLeft(object sender, EventArgs e)
         {
-            // Ez egy kulturált kilépés, de a felhasználót (aki nem kezdeményezte)
-            // tájékoztatni kell róla.
-            // A 'ShowDisconnectionErrorAsync' metódusunk tökéletes erre:
-            // 1. Megjelenít egy dialógust (ez adja a "késleltetést").
-            // 2. Az 'await' (várakozás) alatt a NetworkService el tudja küldeni a 'LEAVE_ACK'-ot.
-            // 3. A 'finally' blokkja kezeli a 'GoToMainMenu'-t, miután a felhasználó "OK"-t nyomott.
-
             Debug.WriteLine("Ellenfél 'Főmenübe lépés' kérés fogadva (OpponentLeft). Dialógus megjelenítése...");
-
-            // Nem "Hiba"-ként, hanem "Tájékoztatásként" hívjuk.
             ShowDisconnectionErrorAsync("Játék Vége", "Az ellenfél kilépett a főmenübe.");
         }
 
@@ -631,7 +570,6 @@ namespace Amoba.ViewModel
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                // Hozzáadjuk az ellenfél üzenetét az előzményekhez
                 ChatHistory.Add(new ChatMessage
                 {
                     Author = OpponentName,
@@ -643,13 +581,9 @@ namespace Amoba.ViewModel
         }
 
         /// Beállítja a Játék Vége állapotot és a győzelmi üzenetet.
-        /// NEM indít automatikus visszavágót.
-        /// </summary>
         private void TriggerGameOver(string title, string message)
         {
-            // =======================================================
-            // HANG LEJÁTSZÁSA (GYŐZELEM/VERESÉG)
-            // =======================================================
+            // HANG LEJÁTSZÁSA
             if (title == "Győzelem!")
             {
                 Messenger.Default.Send(new PlaySoundMessage { SoundName = "Win" });
@@ -658,7 +592,6 @@ namespace Amoba.ViewModel
             {
                 Messenger.Default.Send(new PlaySoundMessage { SoundName = "Lose" });
             }
-            // (Döntetlennél nem játszunk hangot, hacsak nem adsz hozzá egy "Draw" esetet)
 
             // UI szálra váltunk
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
@@ -669,11 +602,8 @@ namespace Amoba.ViewModel
                     IsGameOver = true;
                 }
 
-                // 1. Beállítjuk az új UI property-t
                 GameOverMessage = $"{title} {message}";
 
-                // 2. Frissítjük a CanExecute állapotokat
-                // (Letiltja a táblát, és aktiválja/deaktiválja az AppBar gombokat)
                 (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
             });
         }
@@ -700,7 +630,6 @@ namespace Amoba.ViewModel
                 }
             }
 
-            // 2. Ha egy másik esemény már elindította a navigációt, nem teszünk semmit
             if (!shouldNavigate)
             {
                 return;
@@ -714,17 +643,9 @@ namespace Amoba.ViewModel
             {
                 try
                 {
-                    // 4A. Lekérjük az alkalmazás fő navigációs Frame-jét
                     if (!(Window.Current.Content is Frame rootFrame)) return;
-
-                    // 4B. A meglévő IViewService hívásával elnavigálunk.
-                    // Ez biztosítja, hogy a MainViewModel -> MainPage konverzió működjön.
                     _viewService?.OpenPage<MainViewModel>();
-
-                    // 4C. A NAVIGÁCIÓ UTÁN AZONNAL TÖRÖLJÜK AZ ELŐZMÉNYEKET
-                    // Ez a kulcs: eltávolítja a GamePage-et a "vissza" listáról.
                     rootFrame.BackStack.Clear();
-
                     Debug.WriteLine("GoToMainMenu: Navigáció Főoldalra sikeres, előzmények törölve.");
                 }
                 catch (Exception ex)
@@ -745,15 +666,8 @@ namespace Amoba.ViewModel
                 // 1. Zárolás
                 lock (_gameOverLock)
                 {
-                    // Ha a navigáció már elindult (pl. egy másik hiba miatt),
-                    // akkor ne mutassunk még egy dialógust.
                     if (_isNavigatingToMenu) return;
-
-                    // Ha a játék még futott, zároljuk.
                     IsGameOver = true;
-
-                    // FONTOS: A _isNavigatingToMenu zárat NEM itt állítjuk be,
-                    // hanem a GoToMainMenu-re bízzuk, MIUTÁN a dialógus bezárult.
                 }
 
                 Debug.WriteLine($"VÁRATLAN kapcsolatbontás: {content}");
@@ -783,8 +697,6 @@ namespace Amoba.ViewModel
                 finally
                 {
                     // 4. NAVIGÁLÁS A FŐMENÜBE
-                    // Miután a felhasználó le-OK-zta, a GoToMainMenu-re bízzuk
-                    // a tiszta navigációt, zárolást és takarítást.
                     GoToMainMenu();
                 }
             });
@@ -795,15 +707,12 @@ namespace Amoba.ViewModel
         /// </summary>
         private void HandleDisconnection(string message)
         {
-            // Ez egy VÁRATLAN hiba (pl. küldés meghiúsult).
-            // Mutatunk egy felugró ablakot.
             Debug.WriteLine($"HandleDisconnection fut (Hiba: {message}).");
             ShowDisconnectionErrorAsync("Hálózati Hiba", $"A művelet nem sikerült. A kapcsolat megszakadt.");
         }
 
         /// <summary>
         /// Ez a metódus CSAK a táblát törli és a köröket állítja be.
-        /// NEM bontja a hálózati kapcsolatot (azt a Cleanup() végzi).
         /// </summary>
         private void ResetBoard()
         {
@@ -811,7 +720,6 @@ namespace Amoba.ViewModel
             {
                 DispatcherHelper.CheckBeginInvokeOnUI(() =>
                 {
-                    // 1. DIALÓGUS BEZÁRÁSA (Kritikus a versenyhelyzet elkerüléséhez)
                     if (_activeGameOverDialog != null)
                     {
                         _activeGameOverDialog.Hide();
@@ -819,18 +727,19 @@ namespace Amoba.ViewModel
                     }
 
                     // 2. TÁBLA TÖRLÉSE
-                    foreach (var place in Places) { place.Type = IconType.None; }
+                    foreach (var place in Places)
+                    {
+                        place.Type = IconType.None;
+                        place.IsWinningCell = false;
+                    }
 
-                    // 3. KÖRÖK VISSZAÁLLÍTÁSA (Mindig P1/Host kezd)
+                    // 3. KÖRÖK VISSZAÁLLÍTÁSA
                     IsPlayer1Turn = true;
                     IsPlayer2Turn = false;
-
                     isComputerTurn = false;
                     isProcessingAiMove = false;
 
                     // 4. ZÁROLÁS FELOLDÁSA
-                    // FONTOS: Az IsGameOver-t false-ra állítjuk,
-                    // hogy a következő játék elindulhasson.
                     IsGameOver = false;
 
                     // 5. ÜZENET TÖRLÉSE

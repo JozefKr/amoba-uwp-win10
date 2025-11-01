@@ -11,13 +11,47 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
+        <!-- Konverterek és Stílusok -->
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions" />
         <conv:TurnToColorConverter x:Key="turnToColor"/>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <conv:BooleanToAlignmentConverter x:Key="BoolToAlignmentConverter" />
 
+        <!-- FIGYELEM: A WinningBrush-t most már Page.Resources-ben definiáljuk,
+             hogy a VSM használhassa. -->
+        <SolidColorBrush x:Key="WinningBrushColor" Color="#FFD700" Opacity="0.75" />
+
+        <!-- ======================================================= -->
+        <!-- JAVÍTÁS (1/3): A Storyboard kikerül a Style-ból -->
+        <!-- ======================================================= -->
+        <Storyboard x:Name="PopInStoryboard">
+            <DoubleAnimation
+                Storyboard.TargetName="CellImage"
+                Storyboard.TargetProperty="Opacity"
+                From="0.0" To="1.0" Duration="0:0:0.250" />
+            <DoubleAnimation
+                Storyboard.TargetName="CellImageScale"
+                Storyboard.TargetProperty="ScaleX"
+                From="0.7" To="1.0" Duration="0:0:0.250">
+                <DoubleAnimation.EasingFunction>
+                    <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation
+                Storyboard.TargetName="CellImageScale"
+                Storyboard.TargetProperty="ScaleY"
+                From="0.7" To="1.0" Duration="0:0:0.250">
+                <DoubleAnimation.EasingFunction>
+                    <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+
         <Style x:Key="GameBoardButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}"/>
+
+            <Setter Property="Background" Value="{ThemeResource SystemControlBackgroundBaseLowBrush}" />
+
             <Setter Property="BorderBrush" Value="{ThemeResource SystemControlForegroundBaseLowBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -27,34 +61,13 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
+
                         <Border x:Name="RootBorder"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}">
-                            <Border.Resources>
-                                <Storyboard x:Name="PopInStoryboard">
-                                    <DoubleAnimation
-                                        Storyboard.TargetName="CellImage"
-                                        Storyboard.TargetProperty="Opacity"
-                                        From="0.0" To="1.0" Duration="0:0:0.250" />
-                                    <DoubleAnimation
-                                        Storyboard.TargetName="CellImageScale"
-                                        Storyboard.TargetProperty="ScaleX"
-                                        From="0.7" To="1.0" Duration="0:0:0.250">
-                                        <DoubleAnimation.EasingFunction>
-                                            <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
-                                        </DoubleAnimation.EasingFunction>
-                                    </DoubleAnimation>
-                                    <DoubleAnimation
-                                        Storyboard.TargetName="CellImageScale"
-                                        Storyboard.TargetProperty="ScaleY"
-                                        From="0.7" To="1.0" Duration="0:0:0.250">
-                                        <DoubleAnimation.EasingFunction>
-                                            <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
-                                        </DoubleAnimation.EasingFunction>
-                                    </DoubleAnimation>
-                                </Storyboard>
-                            </Border.Resources>
+
+                            <!-- A VSM továbbra is felülírja a hátteret PointerOver/Pressed esetén -->
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal" />
@@ -75,7 +88,28 @@
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
+
+                                <!-- ======================================================= -->
+                                <!-- A nyerő cella kiemelése VSM-mel (Ez a tiszta megoldás) -->
+                                <!-- ======================================================= -->
+                                <VisualStateGroup x:Name="WinningStates">
+                                    <VisualState x:Name="NotWinning" />
+                                    <VisualState x:Name="Winning">
+                                        <!-- Ha az IsWinningCell TRUE, ez a VisualState aktív lesz -->
+                                        <VisualState.StateTriggers>
+                                            <!-- Ez a DataTrigger a gomb Adatkontextusát (a Place-t) figyeli -->
+                                            <StateTrigger IsActive="{Binding IsWinningCell}"/>
+                                        </VisualState.StateTriggers>
+                                        <VisualState.Setters>
+                                            <!-- Közvetlenül felülírja a RootBorder hátterét az arany színnel -->
+                                            <Setter Target="RootBorder.Background" Value="{StaticResource WinningBrushColor}"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+
                             </VisualStateManager.VisualStateGroups>
+
+                            <!-- Az 'Image' (X/O) -->
                             <Image x:Name="CellImage"
                                 Source="{Binding Image}" 
                                 Stretch="Uniform" 
@@ -88,10 +122,15 @@
                                     <ScaleTransform x:Name="CellImageScale" ScaleX="1.0" ScaleY="1.0" />
                                 </Image.RenderTransform>
                             </Image>
+
                         </Border>
+
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+
+            <!-- TÖRÖLVE: A hibás <Style.Resources> blokk eltávolítva -->
+
         </Style>
     </Page.Resources>
 
@@ -109,6 +148,7 @@
                           Command="{Binding MainMenuCommand}"/>
         </CommandBar>
     </Page.BottomAppBar>
+    
     <Grid x:Name="RootGrid" Padding="20">
 
         <VisualStateManager.VisualStateGroups>
