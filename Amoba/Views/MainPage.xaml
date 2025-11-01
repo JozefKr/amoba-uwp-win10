@@ -75,6 +75,12 @@
                 PlaceholderText="Pl. Pista"
                 Text="{Binding PlayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 IsEnabled="{Binding IsNameEntryEnabled}"/>
+
+            <ProgressRing IsActive="{Binding IsSearching}"
+                      HorizontalAlignment="Center"
+                      Margin="0,0,0,10"
+                      Foreground="{ThemeResource SystemControlHighlightAccentBrush}"/>
+
             <Button
                 x:Name="startHostingButton" 
                 Content="Játék Hostolása (Légy Te a Szerver)" 
