@@ -32,16 +32,27 @@ namespace Amoba.Services
         private const string TcpGamePort = "9091";
         private const string BroadcastMessagePrefix = "AMOBA_GAME_HOST;";
 
+        /// <summary>
+        /// Milyen időközönként küldjünk "életjelet" (10s).
+        /// </summary>
+        private const int PingIntervalSeconds = 10;
+        /// <summary>
+        /// Mennyi ideig várjunk a másik félre, mielőtt halottnak nyilvánítjuk (30s).
+        /// Ennek NAGYOBBNAK kell lennie, mint a PingIntervalSeconds.
+        /// </summary>
+        private const int KeepaliveTimeoutSeconds = 30;
+
         // --- Hálózati Objektumok ---
         private DatagramSocket _hostSocket;
         private DatagramSocket _listenerSocket;
         private StreamSocketListener _tcpListener;
         private StreamSocket _gameSocket;
 
-        // Osztályszintű Olvasó és Író ---
+        // Osztályszintű Olvasó és Író
         private DataReader _socketReader;
         private DataWriter _socketWriter;
-        // ---
+
+        private Timer _pingTimer;
         public string CachedOpponentName { get; private set; }
         private HostName _multicastHostName;
         private Timer _broadcastTimer;
@@ -207,6 +218,10 @@ namespace Amoba.Services
             // ---
 
             StartReading(); // Figyelés indítása
+
+            // Életjel küldésének indítása (Host oldal)
+            StartPingTimer();
+
             HostConnectionEstablished?.Invoke(this, EventArgs.Empty); // Jelzés a MainViewModel-nek
         }
 
@@ -231,7 +246,10 @@ namespace Amoba.Services
                 _socketWriter = new DataWriter(_gameSocket.OutputStream);
                 // ---
 
-                StartReading();
+                StartReading(); // Figyelés indítása
+
+                // Életjel küldésének indítása (Kliens oldal)
+                StartPingTimer();
 
                 // Elküldjük a nevünket a Hostnak ---
                 await SendMessageAsync($"NAME;{myPlayerName}");
@@ -248,6 +266,9 @@ namespace Amoba.Services
         // ===================================================================
         // KOMMUNIKÁCIÓ ÉS LÉPÉSEK
         // ===================================================================
+        /// <summary>
+        /// Folyamatosan figyeli a bejövő TCP üzeneteket, időtúllépéssel.
+        /// </summary>
         private async void StartReading()
         {
             _readCts = new CancellationTokenSource();
@@ -255,39 +276,114 @@ namespace Amoba.Services
             {
                 while (!_readCts.IsCancellationRequested)
                 {
-                    uint size = await _socketReader.LoadAsync(sizeof(uint)).AsTask(_readCts.Token);
-                    if (size == 0) throw new Exception("Kapcsolat lezárva (0 bájt olvasva).");
-
-                    uint messageLength = _socketReader.ReadUInt32();
-                    uint actualMessageSize = await _socketReader.LoadAsync(messageLength).AsTask(_readCts.Token);
-                    if (actualMessageSize == 0 && messageLength > 0) throw new Exception("Kapcsolat lezárva (üzenet olvasása közben).");
-
-                    if (actualMessageSize == messageLength)
+                    // 1. Létrehozunk egy időzítőt erre az olvasási kísérletre
+                    using (var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(KeepaliveTimeoutSeconds)))
+                    // 2. Kombináljuk a fő leállító (_readCts) és az időzítő tokenjét
+                    using (var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(_readCts.Token, timeoutCts.Token))
                     {
-                        string message = _socketReader.ReadString(actualMessageSize);
-                        HandleReceivedMessage(message);
-                    }
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                // VÁRT VISELKEDÉS (Amikor mi magunk hívjuk a Disconnect()-et)
-                Debug.WriteLine("StartReading: Feladat szándékosan leállítva (Cancel).");
+                        uint size;
+                        try
+                        {
+                            // 3. Várunk az adatra a *kombinált* tokennel
+                            size = await _socketReader.LoadAsync(sizeof(uint)).AsTask(combinedCts.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            if (timeoutCts.IsCancellationRequested)
+                            {
+                                // Ez egy KEEPALIVE IDŐTÚLLÉPÉS!
+                                // A másik fél 30 másodperce nem küldött semmit.
+                                throw new Exception($"Keepalive időtúllépés ({KeepaliveTimeoutSeconds}s). A kapcsolat bontva.");
+                            }
+                            // Ha nem az időtúllépés okozta, akkor a _readCts (kulturált Disconnect)
+                            // volt az, hagyjuk, hogy a külső 'catch' elkapja.
+                            throw;
+                        }
+
+                        if (size == 0) throw new Exception("Kapcsolat lezárva (0 bájt olvasva).");
+
+                        // Ha az adat megérkezett az időtúllépés *előtt*, a kód normálisan folytatódik...
+
+                        uint messageLength = _socketReader.ReadUInt32();
+
+                        // A biztonság kedvéért a törzs olvasására is tegyünk időtúllépést
+                        // (bár ennek azonnal meg kellene érkeznie)
+                        uint actualMessageSize;
+                        try
+                        {
+                            using (var bodyTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(KeepaliveTimeoutSeconds)))
+                            using (var bodyCombinedCts = CancellationTokenSource.CreateLinkedTokenSource(_readCts.Token, bodyTimeoutCts.Token))
+                            {
+                                actualMessageSize = await _socketReader.LoadAsync(messageLength).AsTask(bodyCombinedCts.Token);
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw new Exception($"Időtúllépés az üzenettörzs olvasásakor ({KeepaliveTimeoutSeconds}s).");
+                        }
+
+
+                        if (actualMessageSize == 0 && messageLength > 0) throw new Exception("Kapcsolat lezárva (üzenet olvasása közben).");
+
+                        if (actualMessageSize == messageLength)
+                        {
+                            string message = _socketReader.ReadString(actualMessageSize);
+                            HandleReceivedMessage(message);
+                        }
+                    } // end using (timeout tokens)
+                } // end while
             }
             catch (Exception ex)
             {
-                // Bármilyen más hiba (pl. "forcibly closed", ObjectDisposed)
-                // azt jelenti, hogy a kapcsolat megszakadt.
-
                 if (_readCts.IsCancellationRequested)
                 {
-                    Debug.WriteLine($"StartReading: Feladat szándékosan leállítva (Kivétel: {ex.GetType().Name}).");
+                    // VÁRT VISELKEDÉS (Amikor mi magunk hívjuk a Disconnect()-et)
+                    Debug.WriteLine("StartReading: Feladat szándékosan leállítva (Cancel).");
                 }
                 else
                 {
-                    Debug.WriteLine($"Olvasási hiba (Váratlan): {ex.Message}");
+                    // Bármilyen más hiba (pl. "forcibly closed", vagy a mi IDŐTÚLLÉPÉSÜNK)
+                    // azt jelenti, hogy a kapcsolat megszakadt.
+                    Debug.WriteLine($"Olvasási hiba (Váratlan vagy Időtúllépés): {ex.Message}");
                     OpponentDisconnected?.Invoke(this, EventArgs.Empty);
+                    Disconnect(); // Ez a kulcs
                 }
+            }
+        }
+
+        /// <summary>
+        /// Elindít egy időzítőt, ami 10 másodpercenként PING üzenetet küld.
+        /// </summary>
+        private void StartPingTimer()
+        {
+            // Leállítjuk a régit, ha volt
+            _pingTimer?.Dispose();
+
+            // Létrehozzuk az új időzítőt
+            _pingTimer = new Timer(
+                async (state) => await SendPingAsync(), // A metódus, amit hív
+                null, // Állapot (nem kell)
+                TimeSpan.FromSeconds(PingIntervalSeconds), // Azonnal induljon? Nem, ennyi idő múlva
+                TimeSpan.FromSeconds(PingIntervalSeconds)  // Ismétlődés
+            );
+            Debug.WriteLine("Ping időzítő elindítva.");
+        }
+
+        /// <summary>
+        /// Aszinkron módon elküld egy PING üzenetet.
+        /// </summary>
+        private async Task SendPingAsync()
+        {
+            try
+            {
+                await SendMessageAsync("PING;");
+                Debug.WriteLine("[KEEPALIVE] PING elküldve.");
+            }
+            catch (Exception ex)
+            {
+                // Hiba a PING küldésekor = a kapcsolat valószínűleg halott.
+                Debug.WriteLine($"Hiba PING küldésekor: {ex.Message}");
+                // A 'StartReading' metódus időtúllépése fogja ezt lekezelni.
             }
         }
 
@@ -308,6 +404,12 @@ namespace Amoba.Services
                 string clientName = message.Substring(5);
                 Debug.WriteLine($"[HOST RECV] Kliens név fogadva: {clientName}");
                 this.CachedOpponentName = clientName;
+            }
+            else if (message.StartsWith("PING;"))
+            {
+                // Csendben fogadjuk. A lényeg, hogy érkezett adat,
+                // így a 'StartReading' időtúllépése visszaállt.
+                Debug.WriteLine("[KEEPALIVE] PING fogadva.");
             }
             else if (message.StartsWith("CHAT;"))
             {
@@ -445,7 +547,10 @@ namespace Amoba.Services
         {
             _readCts?.Cancel(); // Leállítja a StartReading ciklust
 
-            // Takarítjuk az új mezőket
+            // Leállítjuk a PING időzítőt
+            _pingTimer?.Dispose();
+            _pingTimer = null;
+
             _socketReader?.Dispose();
             _socketReader = null;
             _socketWriter?.Dispose();
