@@ -41,6 +41,27 @@ namespace Amoba.ViewModel
         private bool _isNavigatingToMenu = false;
         private ICommand _mainMenuCommand;
 
+        private string _chatMessageInput;
+        private ICommand _sendChatCommand;
+        public ObservableCollection<string> ChatHistory { get; private set; }
+        public string ChatMessageInput
+        {
+            get => _chatMessageInput;
+            set
+            {
+                if (Set(ref _chatMessageInput, value))
+                {
+                    // Frissítjük a "Küldés" gomb állapotát
+                    (SendChatCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public ICommand SendChatCommand => _sendChatCommand ?? (_sendChatCommand = new RelayCommand(
+            async () => await ExecuteSendChatAsync(),
+            () => IsNetworkGame && !string.IsNullOrWhiteSpace(ChatMessageInput)
+        ));
+
         // --- HÁLÓZATI MEZŐK ---
         private readonly INetworkService _networkService;
         private bool _isNetworkGame = false;
@@ -139,7 +160,7 @@ namespace Amoba.ViewModel
             }
 
             // =======================================================
-            // --- JAVÍTÁS: EGYSÉGES ELLENFÉL NÉV BEÁLLÍTÁS ---
+            // EGYSÉGES ELLENFÉL NÉV BEÁLLÍTÁS ---
             // =======================================================
             // Mindegy, hogy Host vagy Kliens, ha kaptunk opponentNameParam-ot
             // a navigáció során, akkor azt használjuk.
@@ -147,6 +168,8 @@ namespace Amoba.ViewModel
             {
                 OpponentName = opponentNameParam;
             }
+
+            ChatHistory = new ObservableCollection<string>();
 
             // 2. FELIRATKOZÁS (Csak ha hálózati játék)
             if (_isNetworkGame)
@@ -158,6 +181,7 @@ namespace Amoba.ViewModel
                 _networkService.RematchReceived += NetworkService_RematchReceived; // VISSZAVÁGÓ FOGADÁSA
                 _networkService.OpponentLeft += NetworkService_OpponentLeft;
                 _networkService.LeaveAcknowledged += NetworkService_LeaveAcknowledged;
+                _networkService.ChatMessageReceived += NetworkService_ChatMessageReceived; // CHAT
             }
 
             // 3. TÁBLA INICIALIZÁLÁSA
@@ -388,6 +412,35 @@ namespace Amoba.ViewModel
             (SetImage as RelayCommand<Place>)?.RaiseCanExecuteChanged();
         }
 
+        private async Task ExecuteSendChatAsync()
+        {
+            if (!IsNetworkGame || string.IsNullOrWhiteSpace(ChatMessageInput))
+            {
+                return;
+            }
+
+            string messageToSend = ChatMessageInput;
+
+            // Beviteli mező azonnali törlése
+            ChatMessageInput = string.Empty;
+
+            try
+            {
+                // 1. Elküldjük a hálózaton
+                await _networkService.SendChatMessageAsync(messageToSend);
+
+                // 2. Hozzáadjuk a saját előzményeinkhez
+                // (Használjuk a MyPlayerName-et a következetességért)
+                ChatHistory.Add($"Én ({MyPlayerName}): {messageToSend}");
+            }
+            catch (Exception ex)
+            {
+                // Hiba esetén visszaállítjuk a szöveget, hogy újra próbálhassa
+                ChatMessageInput = messageToSend;
+                ChatHistory.Add($"[HIBA A KÜLDÉSKOR: {ex.Message}]");
+            }
+        }
+
         // ===================================================================
         // --- HÁLÓZATI ESEMÉNYKEZELŐK ÉS TAKARÍTÁS ---
         // ===================================================================
@@ -533,6 +586,15 @@ namespace Amoba.ViewModel
 
             // Nem "Hiba"-ként, hanem "Tájékoztatásként" hívjuk.
             ShowDisconnectionErrorAsync("Játék Vége", "Az ellenfél kilépett a főmenübe.");
+        }
+
+        private void NetworkService_ChatMessageReceived(object sender, string messageText)
+        {
+            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            {
+                // Hozzáadjuk az ellenfél üzenetét az előzményekhez
+                ChatHistory.Add($"{OpponentName}: {messageText}");
+            });
         }
 
         /// Beállítja a Játék Vége állapotot és a győzelmi üzenetet.
@@ -755,6 +817,7 @@ namespace Amoba.ViewModel
                 _networkService.RematchReceived -= NetworkService_RematchReceived;
                 _networkService.OpponentLeft -= NetworkService_OpponentLeft;
                 _networkService.LeaveAcknowledged -= NetworkService_LeaveAcknowledged;
+                _networkService.ChatMessageReceived -= NetworkService_ChatMessageReceived;
 
                 _networkService.Disconnect();
             }

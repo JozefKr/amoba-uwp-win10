@@ -30,14 +30,12 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}">
-
                             <Border.Resources>
                                 <Storyboard x:Name="PopInStoryboard">
                                     <DoubleAnimation
                                         Storyboard.TargetName="CellImage"
                                         Storyboard.TargetProperty="Opacity"
                                         From="0.0" To="1.0" Duration="0:0:0.250" />
-
                                     <DoubleAnimation
                                         Storyboard.TargetName="CellImageScale"
                                         Storyboard.TargetProperty="ScaleX"
@@ -77,7 +75,6 @@
                                     </VisualState>
                                 </VisualStateGroup>
                             </VisualStateManager.VisualStateGroups>
-
                             <Image x:Name="CellImage"
                                 Source="{Binding Image}" 
                                 Stretch="Uniform" 
@@ -85,7 +82,6 @@
                                 Opacity="1.0"
                                 RenderTransformOrigin="0.5, 0.5"
                                 SizeChanged="CellImage_SizeChanged">
-
                                 <Image.RenderTransform>
                                     <ScaleTransform x:Name="CellImageScale" ScaleX="1.0" ScaleY="1.0" />
                                 </Image.RenderTransform>
@@ -111,24 +107,66 @@
         </CommandBar>
     </Page.BottomAppBar>
 
+    <!-- FŐ GRID (A teljes oldal) -->
     <Grid Padding="20">
+
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LayoutStates">
+                <VisualState x:Name="NarrowLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                </VisualState>
+                <VisualState x:Name="WideLayout">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="720" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="GameAndChatGrid.RowDefinitions[0].Height" Value="*"/>
+                        <Setter Target="GameAndChatGrid.RowDefinitions[1].Height" Value="0"/>
+                        <Setter Target="GameAndChatGrid.RowDefinitions[2].Height" Value="0"/>
+                        <Setter Target="GameAndChatGrid.ColumnDefinitions[0].Width" Value="*"/>
+                        <Setter Target="GameAndChatGrid.ColumnDefinitions[1].Width" Value="Auto"/>
+                        <Setter Target="GameAndChatGrid.ColumnDefinitions[2].Width" Value="300"/>
+                        <Setter Target="BoardViewbox.(Grid.Row)" Value="0"/>
+                        <Setter Target="BoardViewbox.(Grid.Column)" Value="0"/>
+                        <Setter Target="ChatPanel.(Grid.Row)" Value="0"/>
+                        <Setter Target="ChatPanel.(Grid.Column)" Value="2"/>
+                        <Setter Target="Separator.(Grid.Row)" Value="0"/>
+                        <Setter Target="Separator.(Grid.Column)" Value="1"/>
+                        <Setter Target="Separator.Height" Value="Auto"/>
+                        <Setter Target="Separator.Width" Value="1"/>
+                        <Setter Target="Separator.VerticalAlignment" Value="Stretch"/>
+                        <Setter Target="Separator.HorizontalAlignment" Value="Left"/>
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <!-- 0. sor: Pontszámláló / Game Over üzenet -->
             <RowDefinition Height="*"/>
+            <!-- 1. sor: Játék és Chat -->
         </Grid.RowDefinitions>
 
+        <!-- 0. SOR: PONTSZÁMLÁLÓ / GAME OVER SÁV (Változatlan, ez már jó) -->
         <Grid Grid.Row="0">
-            <Grid HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,0,0,10">
+            <!-- 1A. PONTSZÁMLÁLÓ (MECCS KÖZBEN) -->
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,0,0,10"
+                  Visibility="{Binding IsGameInProgress, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.Transitions>
+                    <TransitionCollection>
+                        <AddDeleteThemeTransition />
+                    </TransitionCollection>
+                </Grid.Transitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Margin="0,0,40,0" HorizontalAlignment="Right">
-                    <TextBlock Text="{Binding MyPlayerName, FallbackValue='JÁTÉKOS (X)'}" 
-                        FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" 
-                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
+                    <TextBlock Text="{Binding MyPlayerName, FallbackValue='JÁTÉKOS (X)'}" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
                     <TextBlock Text="{Binding Player1Score}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer1Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
@@ -141,11 +179,11 @@
                     <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer2Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
             </Grid>
-        </Grid>
-        <Grid Grid.Row="1">
+
+            <!-- 1B. "GAME OVER" PANEL (MECCS VÉGÉN) -->
             <Grid 
                 HorizontalAlignment="Center"
-                VerticalAlignment="Center" 
+                VerticalAlignment="Top" 
                 Margin="0,0,0,10" 
                 Padding="15,10"
                 Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
@@ -169,14 +207,22 @@
                            TextWrapping="Wrap"/>
             </Grid>
         </Grid>
-        <Viewbox Grid.Row="2" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10,0,0">
+
+        <!-- ======================================================= -->
+        <!-- 1. SOR: JÁTÉK ÉS CHAT (JAVÍTVA) -->
+        <!-- ======================================================= -->
+        
+        <!-- 1. NÉZET: HELYI/AI JÁTÉK -->
+        <!-- Ez a Viewbox CSAK akkor látszik, ha NEM hálózati játék -->
+        <Viewbox Grid.Row="1" x:Name="LocalBoardViewbox"
+                 Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,10,0,0"
+                 Visibility="{Binding IsNetworkGame, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert}">
             <ItemsControl
-                x:Name="GameBoard"
+                x:Name="LocalGameBoard"
                 ItemsSource="{Binding Places}"
                 Width="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
                 Height="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
                 Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}">
-
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <ItemsWrapGrid
@@ -184,7 +230,6 @@
                             MaximumRowsOrColumns="{Binding BoardSize}" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Button
@@ -196,10 +241,111 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Viewbox>
+
+        <!-- 2. NÉZET: HÁLÓZATI JÁTÉK (a régi reszponzív Grided) -->
+        <!-- Ez a Grid CSAK akkor látszik, ha HÁLÓZATI játék -->
+        <Grid Grid.Row="1" x:Name="GameAndChatGrid" Margin="0,10,0,0"
+              Visibility="{Binding IsNetworkGame, Converter={StaticResource BooleanToVisibilityConverter}}">
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" x:Name="BoardColumn"/>
+                <ColumnDefinition Width="0" x:Name="SeparatorColumn"/>
+                <ColumnDefinition Width="0" x:Name="ChatColumn"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="150" x:Name="ChatRow"/>
+            </Grid.RowDefinitions>
+
+            <!-- 2A. HÁLÓZATI JÁTÉKTÁBLA -->
+            <Viewbox Grid.Row="0" Grid.Column="0" x:Name="BoardViewbox" 
+                     Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ItemsControl
+                    x:Name="GameBoard"
+                    ItemsSource="{Binding Places}"
+                    Width="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
+                    Height="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
+                    Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid
+                                Orientation="Horizontal"
+                                MaximumRowsOrColumns="{Binding BoardSize}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button
+                                Width="80" Height="80"
+                                Style="{StaticResource GameBoardButtonStyle}"
+                                Command="{Binding DataContext.SetImage, ElementName=PageRoot}"
+                                CommandParameter="{Binding}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Viewbox>
+
+            <!-- 2B. ELVÁLASZTÓ -->
+            <Rectangle x:Name="Separator" 
+                       Grid.Row="1" Grid.Column="0" 
+                       Height="1" Width="Auto" 
+                       HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                       Fill="{ThemeResource SystemControlForegroundBaseLowBrush}" 
+                       Margin="0,10"/>
+
+            <!-- 2C. CHAT FELÜLET -->
+            <Grid Grid.Row="2" Grid.Column="0" x:Name="ChatPanel" Margin="0,10,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="CSEVEGÉS" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,0,0,10"/>
+
+                <ListView Grid.Row="1" 
+                          x:Name="ChatHistoryListView"
+                          ItemsSource="{Binding ChatHistory}"
+                          Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
+                          BorderThickness="1"
+                          BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" TextWrapping="WrapWholeWords"/>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <Grid Grid.Row="2" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             x:Name="ChatInputBox"
+                             PlaceholderText="Írj üzenetet..."
+                             Text="{Binding ChatMessageInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                             VerticalAlignment="Center"
+                             Margin="0,0,5,0"
+                             KeyUp="ChatInputBox_KeyUp"/>
+                    <Button Grid.Column="1"
+                            x:Name="SendChatButton"
+                            FontFamily="Segoe MDL2 Assets"
+                            Content="&#xE724;" 
+                            Command="{Binding SendChatCommand}"
+                            Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                            Foreground="White"/>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- HANG LEJÁTSZÓK (REJTETT) -->
         <StackPanel Height="0" Opacity="0">
             <MediaElement x:Name="ClickSound" Source="ms-appx:///Assets/Sounds/click.mp3" AutoPlay="False" />
             <MediaElement x:Name="WinSound" Source="ms-appx:///Assets/Sounds/win.mp3" AutoPlay="False" />
             <MediaElement x:Name="LoseSound" Source="ms-appx:///Assets/Sounds/lose.mp3" AutoPlay="False" />
         </StackPanel>
+
     </Grid>
 </local:BasePage>

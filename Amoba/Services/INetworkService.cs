@@ -17,6 +17,11 @@ namespace Amoba.Services
         event EventHandler<int> MoveReceived; // Lépés érkezett
 
         /// <summary>
+        /// Akkor sül el, ha a másik féltől chat-üzenet érkezik.
+        /// </summary>
+        event EventHandler<string> ChatMessageReceived;
+
+        /// <summary>
         /// Akkor aktiválódik, ha az ellenfél a Főmenübe lépett (szándékos kilépés).
         /// </summary>
         event EventHandler OpponentLeft;
@@ -89,5 +94,10 @@ namespace Amoba.Services
         /// Elküldi a "Leave" üzenet nyugtázását. (Csak Kliens hívja)
         /// </summary>
         Task SendLeaveAckAsync();
+
+        /// <summary>
+        /// Chat-üzenetet küld a másik játékosnak.
+        /// </summary>
+        Task SendChatMessageAsync(string message);
     }
 }

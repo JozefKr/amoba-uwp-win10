@@ -1,10 +1,14 @@
 ﻿using Amoba.Messages;
+using Amoba.ViewModel;
 using GalaSoft.MvvmLight.Messaging;
 using GalaSoft.MvvmLight.Threading;
 using System;
+using System.Collections.Specialized;
 using System.Diagnostics;
+using Windows.System;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media; // Ez kell a VisualTreeHelper-hez
 using Windows.UI.Xaml.Media.Animation; // Ez kell a Storyboard-hoz
 using Windows.UI.Xaml.Navigation;
@@ -13,6 +17,8 @@ namespace Amoba.Views
 {
     public sealed partial class GamePage : BasePage
     {
+        private GameViewModel Vm => DataContext as GameViewModel;
+
         public GamePage()
         {
             this.InitializeComponent();
@@ -22,6 +28,78 @@ namespace Amoba.Views
             // Amikor ez az oldal létrejön, el kezd figyelni a hang-üzenetekre.
             // =======================================================
             Messenger.Default.Register<PlaySoundMessage>(this, OnPlaySoundMessage);
+        }
+
+        // =======================================================
+        // JAVÍTÁS: Navigációs eseménykezelők az auto-görgetéshez
+        // =======================================================
+
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            base.OnNavigatedTo(e);
+            // Regisztráljuk a hang-üzenet figyelőt
+            Messenger.Default.Register<PlaySoundMessage>(this, OnPlaySoundMessage);
+
+            // Figyeljük, hogy a DataContext (ViewModel) mikor érkezik meg
+            this.DataContextChanged += GamePage_DataContextChanged;
+
+            // Ha a ViewModel már itt van (gyors betöltés), azonnal feliratkozunk
+            SubscribeToChatChanges();
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            base.OnNavigatedFrom(e);
+            // Leiratkozunk mindenről
+            Messenger.Default.Unregister<PlaySoundMessage>(this);
+            this.DataContextChanged -= GamePage_DataContextChanged;
+            UnsubscribeFromChatChanges();
+        }
+
+        private void GamePage_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+        {
+            // Amikor a ViewModel betöltődik, feliratkozunk a chat eseményére
+            SubscribeToChatChanges();
+        }
+
+        private void SubscribeToChatChanges()
+        {
+            if (Vm != null && Vm.ChatHistory != null)
+            {
+                // Feliratkozunk a chat-lista változásaira
+                Vm.ChatHistory.CollectionChanged += ChatHistory_CollectionChanged;
+            }
+        }
+
+        private void UnsubscribeFromChatChanges()
+        {
+            if (Vm != null && Vm.ChatHistory != null)
+            {
+                // Leiratkozunk
+                Vm.ChatHistory.CollectionChanged -= ChatHistory_CollectionChanged;
+            }
+        }
+
+        /// <summary>
+        /// Ez fut le, ha új üzenet érkezik a ChatHistory-ba.
+        /// </summary>
+        private void ChatHistory_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Csak akkor görgetünk, ha új elem(ek)et adtak hozzá
+            if (e.Action == NotifyCollectionChangedAction.Add)
+            {
+                try
+                {
+                    // Megkeressük a legutolsó elemet a listában
+                    var lastItem = ChatHistoryListView.Items[ChatHistoryListView.Items.Count - 1];
+                    // Parancsot adunk a ListView-nak, hogy görgessen ahhoz az elemhez
+                    ChatHistoryListView.ScrollIntoView(lastItem, ScrollIntoViewAlignment.Leading);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Hiba az auto-görgetés közben: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
@@ -106,14 +184,15 @@ namespace Amoba.Views
             }
         }
 
-        // =======================================================
-        // 2. LEIRATKOZÁS (Kritikus!)
-        // Amikor elnavigálunk erről az oldalról, le kell iratkozni.
-        // =======================================================
-        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        private void ChatInputBox_KeyUp(object sender, KeyRoutedEventArgs e)
         {
-            base.OnNavigatedFrom(e);
-            Messenger.Default.Unregister<PlaySoundMessage>(this);
+            if (e.Key == VirtualKey.Enter)
+            {
+                if (Vm != null && Vm.SendChatCommand.CanExecute(null))
+                {
+                    Vm.SendChatCommand.Execute(null);
+                }
+            }
         }
     }
 }

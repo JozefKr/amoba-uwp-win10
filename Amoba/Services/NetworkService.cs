@@ -24,6 +24,7 @@ namespace Amoba.Services
         public event EventHandler RematchReceived;
         public event EventHandler OpponentLeft;
         public event EventHandler LeaveAcknowledged;
+        public event EventHandler<string> ChatMessageReceived;
 
         // --- Konstansok ---
         private const string MulticastGroupAddress = "239.255.42.99";
@@ -308,6 +309,12 @@ namespace Amoba.Services
                 Debug.WriteLine($"[HOST RECV] Kliens név fogadva: {clientName}");
                 this.CachedOpponentName = clientName;
             }
+            else if (message.StartsWith("CHAT;"))
+            {
+                // Egy chat üzenet érkezett
+                string chatMessage = message.Substring(5);
+                ChatMessageReceived?.Invoke(this, chatMessage);
+            }
             else if (message.StartsWith("MOVE:"))
             {
                 if (int.TryParse(message.Substring(5), out int moveIndex))
@@ -417,6 +424,18 @@ namespace Amoba.Services
                 // mert a kapcsolat valószínűleg már bontva van.
                 Debug.WriteLine($"Hiba a 'Leave ACK' küldésekor: {ex.Message}");
             }
+        }
+
+        public async Task SendChatMessageAsync(string message)
+        {
+            // Biztonsági ellenőrzés (pl. ne lehessen ; jellel protokollt törni)
+            if (message.Contains(";"))
+            {
+                message = message.Replace(";", ":");
+            }
+
+            await SendMessageAsync($"CHAT;{message}");
+            Debug.WriteLine($"[NETWORK SEND] Chat üzenet küldve: {message}");
         }
 
         // ===================================================================
