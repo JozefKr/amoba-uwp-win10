@@ -11,7 +11,7 @@ namespace Amoba.Views
         }
 
         // ===================================================================
-        // JAVÍTÁS ITT: Felülbíráljuk az OnNavigatedTo-t
+        // Felülbíráljuk az OnNavigatedTo-t
         // ===================================================================
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {

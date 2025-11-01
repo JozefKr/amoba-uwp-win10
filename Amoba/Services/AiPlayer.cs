@@ -24,12 +24,12 @@ namespace Amoba.Services
         /// <returns>A legjobb lépéshez tartozó Place objektum, vagy null, ha nincs lépés.</returns>
         public Place FindBestMove(ObservableCollection<Place> currentBoardPlaces, int boardSize)
         {
-            // --- JAVÍTÁS: Konvertálás egyszerű tömbre a teljesítményért ---
+            // --- Konvertálás egyszerű tömbre a teljesítményért ---
             IconType[] board = currentBoardPlaces.Select(p => p.Type).ToArray();
             int bestScore = int.MinValue;
             int bestMoveIndex = -1; // A legjobb lépés indexét tároljuk
 
-            // JAVÍTÁS: Optimalizált lépésgenerálás (közép, sarkok, többi)
+            // Optimalizált lépésgenerálás (közép, sarkok, többi)
             foreach (int moveIndex in GetOptimizedPossibleMoves(board, boardSize))
             {
                 // Lépés végrehajtása a tömbön (nincs Place objektum módosítás!)
@@ -79,7 +79,7 @@ namespace Amoba.Services
         /// <returns>Az adott táblaállás értékelése.</returns>
         private int Minimax(IconType[] board, int boardSize, int depth, bool isMaximizing, int alpha, int beta)
         {
-            // --- JAVÍTÁS: GameLogic hívása az IconType[] tömbhöz ---
+            // --- GameLogic hívása az IconType[] tömbhöz ---
             // Ehhez létre kell hozni egy új CheckWinner overloadot a GameLogic-ban!
             IconType winner = GameLogic.CheckWinner(board, boardSize); // ÚJ OVERLOAD SZÜKSÉGES!
 
@@ -87,7 +87,7 @@ namespace Amoba.Services
             if (winner == IconType.Circle) return WIN_SCORE - depth; // AI nyert
             if (winner == IconType.Cross) return LOSS_SCORE + depth; // Ember nyert
 
-            // JAVÍTÁS: Gyorsabb ellenőrzés, hogy van-e még üres hely
+            // Gyorsabb ellenőrzés, hogy van-e még üres hely
             bool isMovesLeft = false;
             for (int i = 0; i < board.Length; i++)
             {
@@ -99,7 +99,7 @@ namespace Amoba.Services
             }
 
             // Alap esetek: Döntetlen vagy mélységi korlát elérése
-            // JAVÍTÁS: Dinamikus mélység számítása
+            // Dinamikus mélység számítása
             if (!isMovesLeft || depth >= CalculateMaxDepth(boardSize))
             {
                 return DRAW_SCORE;
@@ -109,14 +109,14 @@ namespace Amoba.Services
             if (isMaximizing) // AI (maximalizáló)
             {
                 int bestScore = int.MinValue;
-                // JAVÍTÁS: Optimalizált lépések bejárása
+                // Optimalizált lépések bejárása
                 foreach (int moveIndex in GetOptimizedPossibleMoves(board, boardSize))
                 {
                     board[moveIndex] = IconType.Circle;
                     bestScore = Math.Max(bestScore, Minimax(board, boardSize, depth + 1, false, alpha, beta));
                     board[moveIndex] = IconType.None; // Visszavonás
 
-                    // --- JAVÍTÁS: Alfa-Béta vágás ---
+                    // --- Alfa-Béta vágás ---
                     alpha = Math.Max(alpha, bestScore);
                     if (beta <= alpha)
                         break; // Béta vágás: A minimalizáló már talált ennél jobbat, felesleges tovább keresni
@@ -133,7 +133,7 @@ namespace Amoba.Services
                     bestScore = Math.Min(bestScore, Minimax(board, boardSize, depth + 1, true, alpha, beta));
                     board[moveIndex] = IconType.None; // Visszavonás
 
-                    // --- JAVÍTÁS: Alfa-Béta vágás ---
+                    // Alfa-Béta vágás ---
                     beta = Math.Min(beta, bestScore);
                     if (beta <= alpha)
                         break; // Alfa vágás: A maximalizáló már talált ennél jobbat, felesleges tovább keresni

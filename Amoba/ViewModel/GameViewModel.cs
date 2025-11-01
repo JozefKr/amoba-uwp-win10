@@ -281,18 +281,24 @@ namespace Amoba.ViewModel
                 if (place == null || !place.IsEmpty) return;
                 IconType iconToUse = IsPlayer1Turn ? IconType.Cross : IconType.Circle;
 
-                // =======================================================
-                // HANG LEJÁTSZÁSA (KATTINTÁS)
-                // =======================================================
-                Messenger.Default.Send(new PlaySoundMessage { SoundName = "Click" });
-
                 // A ChangeTurn() hívása az ExecuteMove-ból kikerült
                 bool gameIsOver = await ExecuteMove(place, iconToUse);
 
-                if (!gameIsOver) // Csak akkor váltunk kört, ha a játék NEM ért véget
+                if (!gameIsOver)
                 {
+                    // =======================================================
+                    // Ha a játék NEM ért véget (ez egy normál lépés volt):
+
+                    // 1. Játsszuk le a "Click" hangot
+                    Messenger.Default.Send(new PlaySoundMessage { SoundName = "Click" });
+
+                    // 2. Váltsunk kört
                     ChangeTurn();
+                    // =======================================================
                 }
+                // Ha a gameIsOver == true, akkor NEM küldünk "Click" hangot,
+                // mert a 'TriggerGameOver' metódus (amit az 'ExecuteMove' hívott)
+                // már elküldte a "Win" vagy "Lose" hangot.
             }
             catch (Exception ex)
             {

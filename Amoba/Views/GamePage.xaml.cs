@@ -31,7 +31,7 @@ namespace Amoba.Views
         }
 
         // =======================================================
-        // JAVÍTÁS: Navigációs eseménykezelők az auto-görgetéshez
+        // Navigációs eseménykezelők az auto-görgetéshez
         // =======================================================
 
         protected override void OnNavigatedTo(NavigationEventArgs e)

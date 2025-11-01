@@ -8,7 +8,7 @@ namespace Amoba.Model
     public class Place : ViewModelBase
     {
         // ===================================================================
-        // JAVÍTÁS (Teljesítmény): Kép-gyorsítótárazás
+        // (Teljesítmény): Kép-gyorsítótárazás
         // A képeket csak egyszer hozzuk létre, amikor az osztály betöltődik.
         // Ez (főleg az AI klónozása miatt) rengeteg memóriát és processzoridőt spórol.
         // ===================================================================
@@ -70,8 +70,8 @@ namespace Amoba.Model
             // Amikor a Típus változik, az IsEmpty állapota automatikusan követi.
             IsEmpty = (newType == IconType.None);
 
-            // JAVÍTÁS: 'switch' használata olvashatóbb, mint az 'if-else if-else'
-            // JAVÍTÁS: A 'new BitmapImage' helyett a statikus mezőket használjuk.
+            // 'switch' használata olvashatóbb, mint az 'if-else if-else'
+            // A 'new BitmapImage' helyett a statikus mezőket használjuk.
             switch (newType)
             {
                 case IconType.Circle:
@@ -96,7 +96,7 @@ namespace Amoba.Model
             var clone = new Place();
             clone.Id = this.Id;
 
-            // JAVÍTÁS: A 'Type' beállítása automatikusan beállítja
+            // A 'Type' beállítása automatikusan beállítja
             // az 'Image' és 'IsEmpty' tulajdonságokat a klónon is
             // az 'UpdateImageAndState' metóduson keresztül.
             clone.Type = this.Type;

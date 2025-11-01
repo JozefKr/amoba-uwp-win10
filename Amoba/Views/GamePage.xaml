@@ -242,7 +242,7 @@
             </ItemsControl>
         </Viewbox>
 
-        <!-- 2. NÉZET: HÁLÓZATI JÁTÉK (a régi reszponzív Grided) -->
+        <!-- 2. NÉZET: HÁLÓZATI JÁTÉK -->
         <!-- Ez a Grid CSAK akkor látszik, ha HÁLÓZATI játék -->
         <Grid Grid.Row="1" x:Name="GameAndChatGrid" Margin="0,10,0,0"
               Visibility="{Binding IsNetworkGame, Converter={StaticResource BooleanToVisibilityConverter}}">
