@@ -16,10 +16,15 @@
         <conv:TurnToColorConverter x:Key="turnToColor"/>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <conv:BooleanToAlignmentConverter x:Key="BoolToAlignmentConverter" />
+        <conv:BooleanToBrushConverter x:Key="ChatBubbleColorConverter"
+                                  TrueBrush="{StaticResource MyChatBubbleBrush}"
+                                  FalseBrush="{StaticResource OpponentChatBubbleBrush}" />
 
         <!-- FIGYELEM: A WinningBrush-t most már Page.Resources-ben definiáljuk,
              hogy a VSM használhassa. -->
         <SolidColorBrush x:Key="WinningBrushColor" Color="#FFD700" Opacity="0.75" />
+        <SolidColorBrush x:Key="MyChatBubbleBrush" Color="{ThemeResource SystemAccentColor}"/>
+        <SolidColorBrush x:Key="OpponentChatBubbleBrush" Color="#4A4A4A"/> <!-- Középszürke -->
 
         <!-- ======================================================= -->
         <!-- JAVÍTÁS (1/3): A Storyboard kikerül a Style-ból -->
@@ -128,8 +133,6 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
-
-            <!-- TÖRÖLVE: A hibás <Style.Resources> blokk eltávolítva -->
 
         </Style>
     </Page.Resources>
@@ -362,7 +365,7 @@
                         <DataTemplate>
                             <Grid HorizontalAlignment="{Binding IsMine, Converter={StaticResource BoolToAlignmentConverter}}"
                                   MaxWidth="240">
-                                <Border Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}"
+                                <Border Background="{Binding IsMine, Converter={StaticResource ChatBubbleColorConverter}}"
                                         CornerRadius="5"
                                         Padding="8">
                                     <TextBlock 
