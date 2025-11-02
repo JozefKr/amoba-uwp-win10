@@ -25,10 +25,6 @@
         <SolidColorBrush x:Key="WinningBrushColor" Color="#FFD700" Opacity="0.75" />
         <SolidColorBrush x:Key="MyChatBubbleBrush" Color="{ThemeResource SystemAccentColor}"/>
         <SolidColorBrush x:Key="OpponentChatBubbleBrush" Color="#4A4A4A"/> <!-- Középszürke -->
-
-        <!-- ======================================================= -->
-        <!-- JAVÍTÁS (1/3): A Storyboard kikerül a Style-ból -->
-        <!-- ======================================================= -->
         <Storyboard x:Name="PopInStoryboard">
             <DoubleAnimation
                 Storyboard.TargetName="CellImage"

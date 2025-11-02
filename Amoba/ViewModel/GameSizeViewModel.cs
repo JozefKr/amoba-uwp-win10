@@ -53,10 +53,8 @@ namespace Amoba.ViewModel
 
             if (IsNetworkGame && _networkService != null)
             {
-                // Ez a kijelölt sorod, most már helyesen fog lefutni
-                _networkService.HostConnectionEstablished += NetworkService_HostConnectionEstablished;
                 _networkService.NetworkErrorOccurred += NetworkService_NetworkErrorOccurred;
-                StatusMessage = "Várakozás a Kliens csatlakozására...";
+                StatusMessage = "Ellenfél csatlakozott! Válassz méretet a játék indításához:";
             }
             else
             {
@@ -211,40 +209,56 @@ namespace Amoba.ViewModel
         }
 
         /// <summary>
-        /// Akkor fut le, amikor a Kliens sikeresen csatlakozott a TCP listenerhez.
-        /// </summary>
-        private void NetworkService_HostConnectionEstablished(object sender, EventArgs e)
+        /// Akkor fut le, ha a NetworkService hibát vagy 'CANCEL_WAIT' üzenetet észlel.
+        /// (JAVÍTVA: Most már felugró ablakot mutat, és csak OK után navigál)
+        /// </summary>
+        private async void NetworkService_NetworkErrorOccurred(object sender, string errorMessage)
         {
-            // Amikor a kliens csatlakozik, frissítjük az üzenetet
-            DispatcherHelper.CheckBeginInvokeOnUI(() =>
+            // A UI szálra kell váltanunk a dialógus megjelenítéséhez
+            await DispatcherHelper.RunAsync(async () =>
             {
-                StatusMessage = "Ellenfél csatlakozott! Válassz méretet a játék indításához:";
-            });
-        }
-
-        /// <summary>
-        /// Akkor fut le, ha a NetworkService hibát vagy 'CANCEL_WAIT' üzenetet észlel.
-        /// </summary>
-        private void NetworkService_NetworkErrorOccurred(object sender, string errorMessage)
-        {
-            DispatcherHelper.CheckBeginInvokeOnUI(() =>
-            {
-                // 1. Megjelenítjük a hibaüzenetet (ami a CANCEL_WAIT esetén: "Az ellenfél megszakította...")
-                StatusMessage = errorMessage;
-
-                // 2. Leállítjuk a TCP listener-t
-                _networkService.StopHosting();
-
-                _networkService.Disconnect();
-
-                // 3. Visszanavigálunk a MainViewModel-re
-                Task.Delay(1500).ContinueWith((t) =>
+                // 1. Minden hálózati tevékenység leállítása
+                // (Ez lecseréli a régi StopHosting és Disconnect hívásokat)
+                try
                 {
-                    DispatcherHelper.CheckBeginInvokeOnUI(() =>
+                    if (_networkService != null)
+                    {
+                        await _networkService.CancelAllOperationsAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Hiba a CancelAllOperationsAsync hívásakor (NetworkErrorOccurred): {ex.Message}");
+                }
+
+                // 2. Felugró ablak megjelenítése a hibaüzenettel
+                // (A 'errorMessage' itt tipikusan: "Az ellenfél megszakította...")
+                var dialog = new ContentDialog
+                {
+                    Title = "Kapcsolat Megszakadt",
+                    Content = errorMessage,
+                    PrimaryButtonText = "OK (Főmenü)"
+                };
+
+                // 3. Várakozás, amíg a felhasználó le-OK-zza
+                await dialog.ShowAsync();
+
+                // 4. Navigáció a Főmenübe (az 'OK' megnyomása után)
+                try
+                {
+                    if (!(Window.Current.Content is Frame rootFrame))
                     {
                         _viewService.OpenPage<MainViewModel>();
-                    });
-                });
+                        return;
+                    }
+                    _viewService.OpenPage<MainViewModel>();
+                    rootFrame.BackStack.Clear();
+                    Debug.WriteLine("NetworkErrorOccurred: Navigáció Főoldalra sikeres (dialógus után).");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"FATALIS Hiba a navigáció közben (NetworkErrorOccurred): {ex.Message}");
+                }
             });
         }
 
@@ -252,7 +266,6 @@ namespace Amoba.ViewModel
         {
             if (IsNetworkGame && _networkService != null)
             {
-                _networkService.HostConnectionEstablished -= NetworkService_HostConnectionEstablished;
                 _networkService.NetworkErrorOccurred -= NetworkService_NetworkErrorOccurred;
             }
             base.Cleanup();

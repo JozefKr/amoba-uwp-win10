@@ -664,7 +664,7 @@ namespace Amoba.ViewModel
         {
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
-                // JAVÍTÁS: Az üzenet megérkezett, leállítjuk a "gépel" jelzést
+                // Az üzenet megérkezett, leállítjuk a "gépel" jelzést
                 _typingTimer.Change(Timeout.Infinite, Timeout.Infinite);
                 IsOpponentTyping = false;
 

@@ -142,6 +142,7 @@
     <Compile Include="Services\NetworkService.cs" />
     <Compile Include="Services\ViewService.cs" />
     <Compile Include="Services\ViewServiceExtensions.cs" />
+    <Compile Include="ViewModel\DiscoveredGame.cs" />
     <Compile Include="ViewModel\GameSizeViewModel.cs" />
     <Compile Include="ViewModel\GameViewModel.cs" />
     <Compile Include="ViewModel\MainViewModel.cs" />
