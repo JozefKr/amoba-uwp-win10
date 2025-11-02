@@ -4,14 +4,20 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:conv="using:Amoba.Converters"
     mc:Ignorable="d"
     xmlns:local="using:Amoba.Views"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.Resources>
+        <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </Page.Resources>
 
     <Grid Padding="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
@@ -32,10 +38,22 @@
             <Button Content="5 x 5" Margin="0,0,0,0" Command="{Binding SelectSize}" CommandParameter="5" IsEnabled="{Binding Enabled}" MinHeight="50" HorizontalAlignment="Stretch" Background="{ThemeResource SystemControlHighlightAccentBrush}" Foreground="White" />
         </StackPanel>
 
-        <TextBlock Grid.Row="2" 
-                   Text="{Binding StatusMessage}"
-                   Foreground="Green" TextWrapping="Wrap"
-                   Margin="0,20,0,0" HorizontalAlignment="Center"
-                   VerticalAlignment="Bottom" Style="{ThemeResource BaseTextBlockStyle}"/>
+        <Button Grid.Row="2"
+            x:Name="CancelHostButton"
+            Content="Mégse / Hostolás Megszakítása"
+            FontSize="16"
+            Margin="0,40,0,0"
+            MinHeight="40"
+            HorizontalAlignment="Stretch"
+            Background="OrangeRed"
+            Foreground="White"
+            Command="{Binding CancelHostCommand}"
+            Visibility="{Binding IsNetworkGame, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+        <TextBlock Grid.Row="3" 
+               Text="{Binding StatusMessage}"
+               Foreground="Green" TextWrapping="Wrap"
+               Margin="0,20,0,0" HorizontalAlignment="Center"
+               VerticalAlignment="Bottom" Style="{ThemeResource BaseTextBlockStyle}"/>
     </Grid>
 </local:BasePage>

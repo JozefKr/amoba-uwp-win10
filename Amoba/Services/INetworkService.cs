@@ -109,5 +109,11 @@ namespace Amoba.Services
         /// Elküld egy "gépel" jelzést a másik félnek.
         /// </summary>
         Task SendTypingIndicatorAsync();
+
+        Task CancelAllOperationsAsync();
+
+        Task SendCancelWaitingAsync();
+
+
     }
 }

@@ -109,7 +109,9 @@ namespace Amoba.Services
         {
             _broadcastTimer?.Dispose(); _broadcastTimer = null;
             _hostSocket?.Dispose(); _hostSocket = null;
-            Debug.WriteLine("Hostolás (UDP) leállítva.");
+            _tcpListener?.Dispose();
+            _tcpListener = null;
+            Debug.WriteLine("Hostolás (UDP broadcast és TCP listener) leállítva.");
         }
 
         // ===================================================================
@@ -196,9 +198,16 @@ namespace Amoba.Services
 
         private void TcpListener_ConnectionReceived(StreamSocketListener sender, StreamSocketListenerConnectionReceivedEventArgs args)
         {
-            StopHosting();
+            _broadcastTimer?.Dispose(); _broadcastTimer = null;
+            _hostSocket?.Dispose(); _hostSocket = null;
+            Debug.WriteLine("Kapcsolat fogadva, UDP broadcast leállítva.");
 
-            if (_gameSocket != null) { args.Socket.Dispose(); return; }
+            if (_gameSocket != null)
+            {
+                Debug.WriteLine("Már van aktív _gameSocket, az új kapcsolat elutasítva.");
+                args.Socket.Dispose();
+                return;
+            }
 
             _gameSocket = args.Socket;
             Debug.WriteLine($"Kapcsolat elfogadva: {_gameSocket.Information.RemoteHostName}");
@@ -314,7 +323,7 @@ namespace Amoba.Services
             }
             catch (Exception ex)
             {
-                if (_readCts.IsCancellationRequested)
+                if (_readCts == null || _readCts.IsCancellationRequested)
                 {
                     Debug.WriteLine("StartReading: Feladat szándékosan leállítva (Cancel).");
                 }
@@ -376,6 +385,19 @@ namespace Amoba.Services
             else if (message.StartsWith("TYPING;"))
             {
                 OpponentIsTyping?.Invoke(this, EventArgs.Empty);
+            }
+            else if (message.StartsWith("CANCEL_WAIT;"))
+            {
+                // Amikor a Host VAGY Kliens megszakítja a csatlakozási fázist,
+                // az a másik félnek egy NetworkErrorOccurred eseményt vált ki.
+                Debug.WriteLine("[NETWORK RECV] Várakozás megszakítása jelzés fogadva.");
+
+                // Mivel ez a kapcsolat szándékos lezárását jelzi,
+                // az OpponentDisconnected helyett NetworkErrorOccurred eseményt sütünk el.
+                // Ez az esemény a Host/Kliens oldalon a MainViewModel-be fog futni!
+                NetworkErrorOccurred?.Invoke(this, "Az ellenfél megszakította a csatlakozási kísérletet.");
+
+                Disconnect();
             }
         }
 
@@ -497,12 +519,64 @@ namespace Amoba.Services
             }
         }
 
+        public async Task SendCancelWaitingAsync()
+        {
+            // A Keepalive pinghez hasonló, de egyszeri parancs
+            await SendMessageAsync("CANCEL_WAIT;");
+        }
+
+        /// <summary>
+        /// Bármilyen folyamatban lévő hálózati művelet (host, keresés, csatlakozás)
+        /// azonnali, robusztus megszakítása.
+        /// A ViewModel "Mégse" gombjának ezt kell hívnia.
+        /// </summary>
+        public async Task CancelAllOperationsAsync()
+        {
+            Debug.WriteLine("[CancelAllOperationsAsync] Minden művelet megszakítása...");
+
+            // 1. Értesítjük az ellenfelet, ha már van aktív kapcsolat (best-effort)
+            if (_gameSocket != null && _socketWriter != null)
+            {
+                try
+                {
+                    // Ez egy "best-effort" kísérlet. Ha hibát dob,
+                    // (pl. mert a socket már halott), elkapjuk és megyünk tovább.
+                    await SendCancelWaitingAsync();
+                    Debug.WriteLine("[CancelAllOperationsAsync] 'CANCEL_WAIT' üzenet elküldve.");
+
+                    // Várunk 150ms-ot, hogy a Kliensnek legyen ideje feldolgozni
+                    // a "CANCEL_WAIT" üzenetet, MIELŐTT fizikailag
+                    // bontjuk a kapcsolatot.
+                    await Task.Delay(150);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[CancelAllOperationsAsync] 'CANCEL_WAIT' küldése sikertelen (valószínűleg már bontva): {ex.Message}");
+                }
+            }
+
+            // 2. Minden aktív TCP kapcsolat leállítása
+            //    (GameSocket, Reader, Writer, Keepalive, ReadLoop)
+            Disconnect();
+
+            // 3. Minden UDP Host-tal kapcsolatos dolog leállítása
+            //    (Broadcast Timer, Host Socket, TCP Listener)
+            StopHosting();
+
+            // 4. Minden UDP Klienssel kapcsolatos dolog leállítása
+            //    (Listener Socket)
+            StopDiscovering();
+
+            Debug.WriteLine("[CancelAllOperationsAsync] Minden művelet megszakítva és takarítva.");
+        }
+
         // ===================================================================
         // TAKARÍTÁS ÉS IP-Lekérdezés
         // ===================================================================
         public void Disconnect()
         {
             _readCts?.Cancel();
+            _readCts = null;
             _keepaliveTimer?.Dispose(); _keepaliveTimer = null;
 
             _socketReader?.Dispose();
@@ -510,15 +584,12 @@ namespace Amoba.Services
             _socketWriter?.Dispose();
             _socketWriter = null;
 
-            _tcpListener?.Dispose();
-            _tcpListener = null;
-
-            if (_gameSocket != null)
+            if (_gameSocket != null)
             {
                 _gameSocket.Dispose();
                 _gameSocket = null;
-                Debug.WriteLine("TCP kapcsolat megszakadt.");
-            }
+                Debug.WriteLine("TCP kapcsolat (GameSocket) megszakadt.");
+            }
 
             CachedOpponentName = null;
         }
@@ -528,7 +599,7 @@ namespace Amoba.Services
             StopHosting();
             StopDiscovering();
             Disconnect();
-            _writerSemaphore?.Dispose(); // A szemafor is IDisposable
+            _writerSemaphore?.Dispose();
             GC.SuppressFinalize(this);
         }
 

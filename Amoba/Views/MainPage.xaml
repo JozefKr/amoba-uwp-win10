@@ -186,6 +186,16 @@
                 </ListView.ItemTemplate>
             </ListView>
 
+            <Button
+                Content="Mégse / Csatlakozás Megszakítása"
+                FontSize="16"
+                Margin="0,20,0,20"
+                Command="{Binding CancelJoinCommand}"
+                Visibility="{Binding IsJoiningGame, Converter={StaticResource BooleanToVisibilityConverter}}"
+                HorizontalAlignment="Stretch"
+                Background="OrangeRed"
+                Foreground="White"
+                MinHeight="40" />
         </StackPanel>
     </Grid>
 </local:BasePage>
