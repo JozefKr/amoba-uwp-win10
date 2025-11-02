@@ -8,7 +8,6 @@ using Autofac.Core;
 using Autofac;
 using System.Diagnostics;
 using GalaSoft.MvvmLight.Threading;
-using System.Threading.Tasks;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 
@@ -27,9 +26,13 @@ namespace Amoba.ViewModel
         private ICommand _cancelHostCommand;
 
         /// <summary>
-        /// Igaz, ha mi (a Host) kezdeményeztük a megszakítást.
+        /// Igaz, ha a "Mégse" gombot nyomtuk meg, és mi kezdeményeztük a megszakítást.
         /// </summary>
         private bool _isCancellingHost = false;
+        /// <summary>
+        /// Igaz, ha éppen a GamePage-re navigálunk.
+        /// </summary>
+        private bool _isNavigatingAway = false;
 
         /// <summary>
         /// Igaz, ha hálózati játékmódban (Host) vagyunk.
@@ -58,8 +61,7 @@ namespace Amoba.ViewModel
 
             if (IsNetworkGame && _networkService != null)
             {
-                _networkService.NetworkErrorOccurred += NetworkService_NetworkErrorOccurred;
-                _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
+                SubscribeToNetworkEvents();
                 StatusMessage = "Ellenfél csatlakozott! Válassz méretet a játék indításához:";
             }
             else
@@ -80,6 +82,7 @@ namespace Amoba.ViewModel
         private async void ExecuteCancelHost()
         {
             _isCancellingHost = true;
+            _isNavigatingAway = true;
 
             // 1. Hálózati műveletek megszakítása
             if (IsNetworkGame && _networkService != null)
@@ -197,6 +200,9 @@ namespace Amoba.ViewModel
                         Debug.WriteLine("FIGYELEM (GameSizeVM): Az ellenfél neve (CachedOpponentName) null maradt a navigáció pillanatában.");
                     }
 
+                    _isNavigatingAway = true;
+                    UnsubscribeFromNetworkEvents();
+
                     // NAVIGÁCIÓ (MINDIG LEFUT)
                     StatusMessage = "Játék indítása...";
                     _viewService.OpenPage<GameViewModel>(gameParams.ToArray());
@@ -206,6 +212,8 @@ namespace Amoba.ViewModel
                     StatusMessage = $"HIBA: {ex.Message}";
                     Debug.WriteLine($"Hiba a méret kiválasztása/küldése során: {ex.Message}");
                     Enabled = true;
+                    _isNavigatingAway = false; // Navigáció meghiúsult
+                    SubscribeToNetworkEvents(); // Iratkozzunk vissza, ha hiba történt
                 }
             }
             else
@@ -221,9 +229,9 @@ namespace Amoba.ViewModel
         /// </summary>
         private void NetworkService_OpponentDisconnected(object sender, EventArgs e)
         {
-            if (_isCancellingHost)
+            if (_isCancellingHost || _isNavigatingAway)
             {
-                Debug.WriteLine("GameSizeVM: OpponentDisconnected fogadva, de figyelmen kívül hagyva (mi szakítottunk).");
+                Debug.WriteLine("GameSizeVM.OpponentDisconnected: Figyelmen kívül hagyva (Mégse gomb / Navigáció folyamatban).");
                 return;
             }
 
@@ -239,14 +247,18 @@ namespace Amoba.ViewModel
         /// </summary>
         private async void NetworkService_NetworkErrorOccurred(object sender, string errorMessage)
         {
-            if (_isCancellingHost)
+            if (_isCancellingHost || _isNavigatingAway)
             {
-                Debug.WriteLine("GameSizeVM: NetworkErrorOccurred fogadva, de figyelmen kívül hagyva (mi szakítottunk).");
+                Debug.WriteLine("GameSizeVM.NetworkErrorOccurred: Figyelmen kívül hagyva (Mégse gomb / Navigáció folyamatban).");
                 return;
             }
 
-            // A UI szálra kell váltanunk a dialógus megjelenítéséhez
-            await DispatcherHelper.RunAsync(async () =>
+            // Ha ide eljutottunk, az egy VALÓDI, külső hiba (pl. a Kliens megszakította)
+            // Beállítjuk a zárat, hogy többször ne fusson le
+            _isNavigatingAway = true;
+
+            // A UI szálra kell váltanunk a dialógus megjelenítéséhez
+            await DispatcherHelper.RunAsync(async () =>
             {
                 // 1. Minden hálózati tevékenység leállítása
                 // (Ez lecseréli a régi StopHosting és Disconnect hívásokat)
@@ -293,12 +305,25 @@ namespace Amoba.ViewModel
             });
         }
 
+        private void SubscribeToNetworkEvents()
+        {
+            Debug.WriteLine("GameSizeViewModel: Feliratkozás az eseményekre...");
+            _networkService.NetworkErrorOccurred += NetworkService_NetworkErrorOccurred;
+            _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
+        }
+
+        private void UnsubscribeFromNetworkEvents()
+        {
+            Debug.WriteLine("GameSizeViewModel: Leiratkozás az eseményekről...");
+            _networkService.NetworkErrorOccurred -= NetworkService_NetworkErrorOccurred;
+            _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
+        }
+
         public override void Cleanup()
         {
             if (IsNetworkGame && _networkService != null)
             {
-                _networkService.NetworkErrorOccurred -= NetworkService_NetworkErrorOccurred;
-                _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
+                UnsubscribeFromNetworkEvents();
             }
             base.Cleanup();
         }
