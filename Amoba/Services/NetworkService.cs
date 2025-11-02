@@ -250,7 +250,8 @@ namespace Amoba.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"Hiba a kapcsolódáskor: {ex.Message}");
-                NetworkErrorOccurred?.Invoke(this, $"Hiba a kapcsolódáskor: {ex.Message}");
+                string friendlyErrorMessage = "A csatlakozás sikertelen. A host már nem elérhető, vagy leállt.";
+                NetworkErrorOccurred?.Invoke(this, friendlyErrorMessage);
                 Disconnect();
             }
         }

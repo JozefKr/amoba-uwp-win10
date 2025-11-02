@@ -161,7 +161,7 @@
                 MinHeight="40" />
 
             <TextBlock Text="{Binding StatusMessage}"
-                       Foreground="Green"
+                       Foreground="{Binding StatusMessageBrush}"
                        TextWrapping="Wrap"
                        Margin="0,0,0,10"
                        HorizontalAlignment="Center"

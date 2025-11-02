@@ -132,6 +132,7 @@
     <Compile Include="Model\GameType.cs" />
     <Compile Include="Model\IconType.cs" />
     <Compile Include="Model\Place.cs" />
+    <Compile Include="Model\StatusType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AiPlayer.cs" />
     <Compile Include="Services\GameFoundEventArgs.cs" />

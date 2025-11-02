@@ -13,6 +13,9 @@ using Windows.Storage;
 using System.Diagnostics;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
+using Windows.UI;
+using Amoba.Model;
 
 namespace Amoba.ViewModel
 {
@@ -24,6 +27,14 @@ namespace Amoba.ViewModel
         // --- Időzítő a lejárt hostok eltávolításához ---
         private DispatcherTimer _discoveryCleanupTimer;
         private const int StaleGameTimeoutSeconds = 5; // Host 2 másodpercenként küld, 5s csend után lejártnak tekintjük
+
+        private static readonly Brush ErrorBrush = new SolidColorBrush(Colors.Red);
+        private static readonly Brush InfoBrush = new SolidColorBrush(Colors.Green);
+
+        /// <summary>
+        /// Igaz, ha a ViewModel éppen egy másik oldalra navigál.
+        /// </summary>
+        private bool _isNavigatingAway = false;
 
         // --- Privát Állapotjelzők ---
         private bool _isJoiningGame = false;
@@ -115,7 +126,14 @@ namespace Amoba.ViewModel
         public string StatusMessage
         {
             get => _statusMessage;
-            set => Set(ref _statusMessage, value);
+            private set => Set(ref _statusMessage, value);
+        }
+
+        private Brush _statusMessageBrush;
+        public Brush StatusMessageBrush
+        {
+            get => _statusMessageBrush;
+            set => Set(ref _statusMessageBrush, value);
         }
 
         /// <summary>
@@ -155,6 +173,9 @@ namespace Amoba.ViewModel
             _networkService.HostConnectionEstablished += NetworkService_HostConnectionEstablished;
             _networkService.GameStarted += NetworkService_GameStarted;
 
+            // Alapértelmezett szín beállítása
+            StatusMessageBrush = InfoBrush;
+
             InitializeCommands();
 
             // === Lejárt játékok figyelőjének indítása ===
@@ -182,6 +203,33 @@ namespace Amoba.ViewModel
 
             StopHostingCommand = new RelayCommand(ExecuteStopHosting);
             CancelJoinCommand = new RelayCommand(ExecuteCancelJoin, () => IsJoiningGame);
+        }
+
+        /// <summary>
+        /// Központilag beállítja a státuszüzenetet és annak színét.
+        /// </summary>
+        /// <param name="message">A megjelenítendő szöveg</param>
+        /// <param name="type">Az üzenet típusa (Info = zöld, Error = piros)</param>
+        public void SetStatus(string message, StatusType type = StatusType.Info)
+        {
+            StatusMessage = message; // Beállítjuk a szöveget
+
+            // Beállítjuk a színt
+            switch (type)
+            {
+                case StatusType.Error:
+                    StatusMessageBrush = ErrorBrush;
+                    break;
+
+                // case StatusType.Warning:
+                //    StatusMessageBrush = WarningBrush; //későbbiekhez
+                //    break;
+
+                case StatusType.Info:
+                default:
+                    StatusMessageBrush = InfoBrush;
+                    break;
+            }
         }
 
         private void SavePlayerName(string name)
@@ -215,6 +263,7 @@ namespace Amoba.ViewModel
         private void StartLocalPvpMethod()
         {
             StopAllNetworkActivity();
+            UnsubscribeFromNetworkEvents();
 
             var localParams = new List<Parameter>
             {
@@ -230,6 +279,7 @@ namespace Amoba.ViewModel
         private void StartAiGameMethod()
         {
             StopAllNetworkActivity();
+            UnsubscribeFromNetworkEvents();
 
             var aiParams = new List<Parameter>
             {
@@ -251,14 +301,14 @@ namespace Amoba.ViewModel
 
             try
             {
-                StatusMessage = "Játék hostolása folyamatban, TCP szerver indítása...";
+                SetStatus("Játék hostolása folyamatban, TCP szerver indítása...", StatusType.Info);
                 await _networkService.StartHostingAsync(PlayerName);
                 await _networkService.StartAcceptingConnectionsAsync();
-                StatusMessage = "Hostolás aktív! Várjuk a csatlakozást...";
+                SetStatus("Hostolás aktív! Várjuk a csatlakozást...", StatusType.Info);
             }
             catch (Exception ex)
             {
-                StatusMessage = $"HIBA: Nem sikerült hostolni. {ex.Message}";
+                SetStatus($"HIBA: Nem sikerült hostolni. {ex.Message}", StatusType.Error);
                 _networkService.StopHosting();
                 IsHosting = false;
             }
@@ -271,7 +321,7 @@ namespace Amoba.ViewModel
         {
             _networkService.StopHosting();
             IsHosting = false;
-            StatusMessage = "Hostolás leállítva.";
+            SetStatus("Hostolás leállítva.", StatusType.Info);
         }
 
         // 3. JÁTÉK KERESÉSE (KLIENS)
@@ -282,7 +332,7 @@ namespace Amoba.ViewModel
             IsHosting = false;
 
             FoundGames.Clear();
-            StatusMessage = "Játékok keresése aktív...";
+            SetStatus("Játékok keresése aktív...", StatusType.Info);
             await _networkService.StartDiscoveringAsync();
             IsSearching = true;
 
@@ -295,7 +345,7 @@ namespace Amoba.ViewModel
         {
             _networkService.StopDiscovering();
             IsSearching = false;
-            StatusMessage = "Keresés leállítva.";
+            SetStatus("Keresés leállítva.", StatusType.Info);
 
             // === Időzítő leállítása ===
             _discoveryCleanupTimer.Stop();
@@ -307,8 +357,8 @@ namespace Amoba.ViewModel
         {
             if (IsJoiningGame) return;
             IsJoiningGame = true;
-            StopDiscovery(); // A StopDiscovery leállítja az időzítőt is
-            StatusMessage = $"Csatlakozás: {gameToJoin.IpAddress}...";
+            StopDiscovery();
+            SetStatus($"Csatlakozás: {gameToJoin.IpAddress}...", StatusType.Info);
 
             await _networkService.ConnectToGameAsync(gameToJoin.IpAddress, PlayerName);
 
@@ -317,7 +367,7 @@ namespace Amoba.ViewModel
             if (IsJoiningGame)
             {
                 // Ez a sor most már csak akkor fut le, ha a csatlakozás TÉNYLEG sikeres volt.
-                StatusMessage = "Sikeresen csatlakozva. Várakozás a Hostra...";
+                SetStatus("Sikeresen csatlakozva. Várakozás a Hostra...", StatusType.Info);
                 (CancelJoinCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
             else
@@ -370,7 +420,7 @@ namespace Amoba.ViewModel
                 IsJoiningGame = false;
 
                 // 3. StatusMessage frissítése
-                StatusMessage = "Csatlakozás megszakítva. Keresés újraindítva.";
+                SetStatus("Csatlakozás megszakítva. Keresés újraindítva.", StatusType.Info);
 
                 // 4. Újraindítjuk a keresést, hogy a többi játék látszódjon
                 //    (A StartDiscovery() elindítja az időzítőt is)
@@ -385,7 +435,7 @@ namespace Amoba.ViewModel
                 // Ha a megszakítás során hiba történik, naplózzuk és
                 // egy biztonságos állapotba lépünk (pl. Főmenü).
                 Debug.WriteLine($"Váratlan hiba a csatlakozás megszakításakor: {ex.Message}");
-                StatusMessage = "Hiba történt a megszakítás során. Visszatérés a főmenübe.";
+                SetStatus("Hiba történt a megszakítás során. Visszatérés a főmenübe.", StatusType.Error);
                 IsJoiningGame = false;
             }
         }
@@ -397,10 +447,6 @@ namespace Amoba.ViewModel
 
         private void NetworkService_GameFound(object sender, GameFoundEventArgs e)
         {
-            // FONTOS: Ehhez a `DiscoveredGame` osztályt ki kell egészíteni
-            // egy 'public DateTime LastSeen { get; set; }' tulajdonsággal!
-            // (Ezt a másik generált fájl tartalmazza)
-
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 // 1. Megkeressük, hogy létezik-e már ez a játék (IP cím alapján)
@@ -425,24 +471,27 @@ namespace Amoba.ViewModel
                     {
                         DisplayName = newName,
                         IpAddress = e.IpAddress,
-                        LastSeen = DateTime.Now // <<< FONTOS
+                        LastSeen = DateTime.Now
                     });
                     Debug.WriteLine($"Új játék észlelve: {e.HostName} ({e.IpAddress})");
                 }
-
-                StatusMessage = $"Játék talált: {FoundGames.Count} elérhető host.";
+                SetStatus($"Játék talált: {FoundGames.Count} elérhető host.", StatusType.Info);
             });
         }
 
         private async void NetworkService_NetworkErrorOccurred(object sender, string errorMessage)
         {
+            // Ha épp navigálunk el, ne csináljunk semmit ===
+            if (_isNavigatingAway)
+            {
+                Debug.WriteLine("MainViewModel.NetworkErrorOccurred: Figyelmen kívül hagyva (navigáció folyamatban).");
+                return;
+            }
             // A UI szálra váltunk a dialógushoz
             await DispatcherHelper.RunAsync(async () =>
             {
                 // 1. Állapotok visszaállítása (a háttérben)
                 IsJoiningGame = false;
-                if (IsSearching) { StopDiscovery(); } // StopDiscovery leállítja a timert és törli a listát
-                if (IsHosting) { ExecuteStopHosting(); }
 
                 // 2. Felugró ablak megjelenítése
                 // (A 'errorMessage' itt lehet technikai, vagy "Az ellenfél megszakította...")
@@ -464,7 +513,7 @@ namespace Amoba.ViewModel
                 }
                 // 3. A StatusMessage-t csak a dialógus UTÁN állítjuk be,
                 //    hogy a felhasználó lássa a hiba okát.
-                StatusMessage = errorMessage;
+                SetStatus(errorMessage, StatusType.Error);
             });
         }
 
@@ -473,7 +522,9 @@ namespace Amoba.ViewModel
             DispatcherHelper.CheckBeginInvokeOnUI(() =>
             {
                 _networkService.StopHosting();
-                StatusMessage = $"Kliens csatlakozott. Válassz táblaméretet...";
+                SetStatus($"Kliens csatlakozott. Válassz táblaméretet...", StatusType.Info);
+
+                UnsubscribeFromNetworkEvents();
 
                 var networkParams = new List<Parameter>
                 {
@@ -491,7 +542,9 @@ namespace Amoba.ViewModel
             {
                 DispatcherHelper.CheckBeginInvokeOnUI(() =>
                 {
-                    StatusMessage = $"Játék indul {e.OpponentName} ellen ({e.BoardSize}x{e.BoardSize})...";
+                    SetStatus($"Játék indul {e.OpponentName} ellen ({e.BoardSize}x{e.BoardSize})...", StatusType.Info);
+
+                    UnsubscribeFromNetworkEvents();
 
                     var networkParams = new List<Parameter>
                     {
@@ -508,11 +561,10 @@ namespace Amoba.ViewModel
             }
         }
 
-        // === ÚJ METÓDUS: CleanupStaleGames_Tick ===
         /// <summary>
-                /// A DispatcherTimer metódusa, ami másodpercenként lefut,
-                /// és eltávolítja a listáról azokat a hostokat, amik 5s+ ideje nem adtak életjelet.
-                /// </summary>
+        /// A DispatcherTimer metódusa, ami másodpercenként lefut,
+        /// és eltávolítja a listáról azokat a hostokat, amik 5s+ ideje nem adtak életjelet.
+        /// </summary>
         private void CleanupStaleGames_Tick(object sender, object e)
         {
             // Keressük az összes "lejárt" játékot (ahol 5s-nél régebbi az utolsó életjel)
@@ -532,11 +584,11 @@ namespace Amoba.ViewModel
                     // Frissítjük a státuszüzenetet
                     if (FoundGames.Count == 0)
                     {
-                        StatusMessage = "Játékok keresése aktív...";
+                        SetStatus("Játékok keresése aktív...", StatusType.Info);
                     }
                     else
                     {
-                        StatusMessage = $"Játék talált: {FoundGames.Count} elérhető host.";
+                        SetStatus($"Játék talált: {FoundGames.Count} elérhető host.", StatusType.Info);
                     }
                 });
             }
@@ -557,6 +609,15 @@ namespace Amoba.ViewModel
             if (IsSearching) { StopDiscovery(); }
         }
 
+        private void UnsubscribeFromNetworkEvents()
+        {
+            Debug.WriteLine("MainViewModel: Leiratkozás a hálózati eseményekről...");
+            _networkService.GameFound -= NetworkService_GameFound;
+            _networkService.NetworkErrorOccurred -= NetworkService_NetworkErrorOccurred;
+            _networkService.HostConnectionEstablished -= NetworkService_HostConnectionEstablished;
+            _networkService.GameStarted -= NetworkService_GameStarted;
+        }
+
 
         public override void Cleanup()
         {
@@ -568,11 +629,7 @@ namespace Amoba.ViewModel
                 _discoveryCleanupTimer = null;
             }
 
-            // Leiratkozás az összes eseményről
-            _networkService.GameFound -= NetworkService_GameFound;
-            _networkService.NetworkErrorOccurred -= NetworkService_NetworkErrorOccurred;
-            _networkService.HostConnectionEstablished -= NetworkService_HostConnectionEstablished;
-            _networkService.GameStarted -= NetworkService_GameStarted;
+            UnsubscribeFromNetworkEvents();
 
             StopAllNetworkActivity();
 

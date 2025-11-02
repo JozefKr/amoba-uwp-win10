@@ -27,6 +27,11 @@ namespace Amoba.ViewModel
         private ICommand _cancelHostCommand;
 
         /// <summary>
+        /// Igaz, ha mi (a Host) kezdeményeztük a megszakítást.
+        /// </summary>
+        private bool _isCancellingHost = false;
+
+        /// <summary>
         /// Igaz, ha hálózati játékmódban (Host) vagyunk.
         /// A XAML ehhez köti a "Mégse" gomb láthatóságát.
         /// </summary>
@@ -54,6 +59,7 @@ namespace Amoba.ViewModel
             if (IsNetworkGame && _networkService != null)
             {
                 _networkService.NetworkErrorOccurred += NetworkService_NetworkErrorOccurred;
+                _networkService.OpponentDisconnected += NetworkService_OpponentDisconnected;
                 StatusMessage = "Ellenfél csatlakozott! Válassz méretet a játék indításához:";
             }
             else
@@ -73,6 +79,8 @@ namespace Amoba.ViewModel
         /// </summary>
         private async void ExecuteCancelHost()
         {
+            _isCancellingHost = true;
+
             // 1. Hálózati műveletek megszakítása
             if (IsNetworkGame && _networkService != null)
             {
@@ -209,11 +217,34 @@ namespace Amoba.ViewModel
         }
 
         /// <summary>
+        /// Akkor fut le, ha a kliens váratlanul (pl. app bezárás) bontja a kapcsolatot.
+        /// </summary>
+        private void NetworkService_OpponentDisconnected(object sender, EventArgs e)
+        {
+            if (_isCancellingHost)
+            {
+                Debug.WriteLine("GameSizeVM: OpponentDisconnected fogadva, de figyelmen kívül hagyva (mi szakítottunk).");
+                return;
+            }
+
+            Debug.WriteLine("GameSizeVM: OpponentDisconnected esemény fogadva.");
+            // Ugyanazt a hibakezelőt hívjuk meg, mint a NetworkErrorOccurred,
+            // de egy egyértelmű, felhasználóbarát üzenettel.
+            NetworkService_NetworkErrorOccurred(sender, "Az ellenfél váratlanul bontotta a kapcsolatot.");
+        }
+
+        /// <summary>
         /// Akkor fut le, ha a NetworkService hibát vagy 'CANCEL_WAIT' üzenetet észlel.
-        /// (JAVÍTVA: Most már felugró ablakot mutat, és csak OK után navigál)
+        /// (Most már felugró ablakot mutat, és csak OK után navigál)
         /// </summary>
         private async void NetworkService_NetworkErrorOccurred(object sender, string errorMessage)
         {
+            if (_isCancellingHost)
+            {
+                Debug.WriteLine("GameSizeVM: NetworkErrorOccurred fogadva, de figyelmen kívül hagyva (mi szakítottunk).");
+                return;
+            }
+
             // A UI szálra kell váltanunk a dialógus megjelenítéséhez
             await DispatcherHelper.RunAsync(async () =>
             {
@@ -267,6 +298,7 @@ namespace Amoba.ViewModel
             if (IsNetworkGame && _networkService != null)
             {
                 _networkService.NetworkErrorOccurred -= NetworkService_NetworkErrorOccurred;
+                _networkService.OpponentDisconnected -= NetworkService_OpponentDisconnected;
             }
             base.Cleanup();
         }
