@@ -9,6 +9,8 @@ using Autofac;
 using System.Diagnostics;
 using GalaSoft.MvvmLight.Threading;
 using System.Threading.Tasks;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 
 namespace Amoba.ViewModel
 {
@@ -68,34 +70,55 @@ namespace Amoba.ViewModel
         public ICommand CancelHostCommand => _cancelHostCommand ?? (_cancelHostCommand = new RelayCommand(ExecuteCancelHost));
 
         /// <summary>
-        /// Leállítja a hálózati műveleteket (hostolás) és navigál a főoldalra.
-        /// A 'MainViewModel' ExecuteCancelJoin metódusának logikája alapján frissítve.
+        /// Leállítja a hálózati műveleteket (hostolás) és visszanavigál a főoldalra,
+        /// TÖRÖLVE a navigációs előzményeket.
         /// </summary>
         private async void ExecuteCancelHost()
         {
-            // Ellenőrizzük, hogy ez egyáltalán hálózati hostolás-e.
+            // 1. Hálózati műveletek megszakítása
             if (IsNetworkGame && _networkService != null)
             {
                 try
                 {
-                    // 1. A 'MainViewModel' mintájára a központi megszakító metódust hívjuk.
-                    //    Ez a metódus (feltételezhetően) gondoskodik a SendCancelWaitingAsync-ról,
-                    //    a StopHosting()-ról és a Disconnect()-ről is.
+                    // A központi megszakító metódus hívása.
                     await _networkService.CancelAllOperationsAsync();
                 }
                 catch (Exception ex)
                 {
                     // Ha a megszakítás során hiba történik, azt naplózzuk.
-                    // A visszanavigálás a metódus végén így is, úgy is meg fog történni.
                     Debug.WriteLine($"Hiba a hostolás megszakítása (CancelAllOperationsAsync) során: {ex.Message}");
                 }
             }
 
-            // 2. Visszanavigálás a főoldalra.
-            //    Az eredeti metódusban ez az 'if' blokkon kívül volt,
-            //    ami biztosítja, hogy a navigáció mindig megtörténjen,
-            //    amint a megszakítási kísérlet (sikeres vagy sikertelen) lezajlott.
-            _viewService.OpenPage<MainViewModel>();
+            // 2. Navigáció a Főmenübe ÉS Előzmények Törlése
+            //    (Ezt a logikát a GameViewModel-ből másoltuk át,
+            //     hogy a "vissza" gomb ne működjön a MainPage-ről)
+            await DispatcherHelper.RunAsync(() =>
+            {
+                try
+                {
+                    if (!(Window.Current.Content is Frame rootFrame))
+                    {
+                        // Vészhelyzeti eset: ha nincs Frame, a régi módon navigálunk
+                        _viewService.OpenPage<MainViewModel>();
+                        return;
+                    }
+
+                    // 1. Navigálunk a főoldalra
+                    _viewService.OpenPage<MainViewModel>();
+
+                    // 2. TÖRÖLJÜK A TELJES NAVIGÁCIÓS VERMET
+                    //    Ez akadályozza meg, hogy a vissza gomb
+                    //    visszadobja a felhasználót a GameSizePage-re.
+                    rootFrame.BackStack.Clear();
+
+                    Debug.WriteLine("ExecuteCancelHost: Navigáció Főoldalra sikeres, előzmények törölve.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"FATALIS Hiba a navigáció közben (ExecuteCancelHost): {ex.Message}");
+                }
+            });
         }
 
         /// <summary>
