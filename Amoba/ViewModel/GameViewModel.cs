@@ -79,9 +79,6 @@ namespace Amoba.ViewModel
 
         // --- PUBLIKUS PROPERTY-K ---
         public int BoardSize { get => boardSize; set => Set(ref boardSize, value); }
-        public int Player2Score { get => player2Score; set => Set(ref player2Score, value); }
-        public int Player1Score { get => player1Score; set => Set(ref player1Score, value); }
-
         public bool IsPlayer1Turn { get => isPlayer1Turn; set => Set(ref isPlayer1Turn, value); }
         public bool IsPlayer2Turn
         {
@@ -98,7 +95,6 @@ namespace Amoba.ViewModel
                 }
             }
         }
-
         public bool IsNetworkGame { get => _isNetworkGame; set => Set(ref _isNetworkGame, value); }
         public bool AmIHost { get => _amIHost; set => Set(ref _amIHost, value); }
         public string OpponentName { get => _opponentName; set => Set(ref _opponentName, value); }
@@ -129,6 +125,26 @@ namespace Amoba.ViewModel
         {
             get => _isOpponentTyping;
             set => Set(ref _isOpponentTyping, value);
+        }
+
+        private int _myPlayerScore;
+        /// <summary>
+        /// A "saját" játékosom pontszáma. A XAML ehhez köti a MyPlayerName-et.
+        /// </summary>
+        public int MyPlayerScore
+        {
+            get => _myPlayerScore;
+            set => Set(ref _myPlayerScore, value);
+        }
+
+        private int _opponentPlayerScore;
+        /// <summary>
+        /// Az ellenfél pontszáma. A XAML ehhez köti az OpponentName-et.
+        /// </summary>
+        public int OpponentPlayerScore
+        {
+            get => _opponentPlayerScore;
+            set => Set(ref _opponentPlayerScore, value);
         }
 
         // --- PARANCSOK ---
@@ -212,8 +228,9 @@ namespace Amoba.ViewModel
             {
                 Places.Add(new Place() { Id = i, Type = IconType.None });
             }
-            Player1Score = 0;
-            Player2Score = 0;
+            player1Score = 0;
+            player2Score = 0;
+            UpdateObservableScores();
             isComputerTurn = false;
             IsGameOver = false;
 
@@ -334,7 +351,7 @@ namespace Amoba.ViewModel
                         message = (!IsNetworkGame || AmIHost)
                                     ? $"{MyPlayerName} Nyert!"
                                     : $"{OpponentName} Nyert!";
-                        Player1Score++;
+                        player1Score++;
                     }
                     else // Játékos 2 (O) nyert
                     {
@@ -342,8 +359,9 @@ namespace Amoba.ViewModel
                         message = (!IsNetworkGame || AmIHost)
                                     ? $"{OpponentName} Nyert!"
                                     : $"{MyPlayerName} Nyert!";
-                        Player2Score++;
+                        player2Score++;
                     }
+                    UpdateObservableScores();
                 }
                 else // Döntetlen
                 {
@@ -488,6 +506,32 @@ namespace Amoba.ViewModel
             finally
             {
                 _isSendingChat = false; // <-- FELOLDÁS
+            }
+        }
+
+        /// <summary>
+        /// Frissíti a UI-hoz kötött pontszám-property-ket (MyPlayerScore, OpponentPlayerScore)
+        /// a belső player1Score (X) és player2Score (O) alapján.
+        /// </summary>
+        private void UpdateObservableScores()
+        {
+            if (IsNetworkGame)
+            {
+                if (AmIHost) // Én vagyok a Host (X)
+                {
+                    MyPlayerScore = player1Score;
+                    OpponentPlayerScore = player2Score;
+                }
+                else // Én vagyok a Kliens (O)
+                {
+                    MyPlayerScore = player2Score;
+                    OpponentPlayerScore = player1Score;
+                }
+            }
+            else // Helyi vagy Gép elleni játék (Saját Játékos mindig X)
+            {
+                MyPlayerScore = player1Score;
+                OpponentPlayerScore = player2Score;
             }
         }
 

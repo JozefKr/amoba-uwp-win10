@@ -231,7 +231,7 @@
                     <TextBlock Text="{Binding MyPlayerName, FallbackValue='JÁTÉKOS (X)'}" 
                                FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" 
                                Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
-                    <TextBlock Text="{Binding Player1Score}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding MyPlayerScore}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer1Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
                 <TextBlock Text="VS" Grid.Column="1" FontSize="32" FontWeight="Light" VerticalAlignment="Center" Margin="0,0,0,10" Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
@@ -239,7 +239,7 @@
                     <TextBlock Text="{Binding OpponentName, FallbackValue='JÁTÉKOS (O)'}" 
                                FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" 
                                Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"/>
-                    <TextBlock Text="{Binding Player2Score}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{Binding OpponentPlayerScore}" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <Ellipse Height="10" Width="10" Fill="{Binding IsPlayer2Turn, Converter={StaticResource turnToColor}}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
             </Grid>
