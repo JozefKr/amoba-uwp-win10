@@ -86,8 +86,6 @@ namespace Amoba.Services
             }
         }
 
-
-        // A metódus többi része változatlan
         public void OpenPage<TViewModel>(params Parameter[] parameters) where TViewModel : ViewModelBase
         {
             if (rootFrame == null)

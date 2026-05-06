@@ -25,13 +25,12 @@ namespace Amoba
                    .WithParameter("rootFrame", rootFrame)
                    .SingleInstance();
 
-            // --- HOZZÁADVA: Az INetworkService regisztrálása ---
+            // Az INetworkService regisztrálása ---
             // Megmondjuk az Autofac-nak, hogy ha INetworkService kell,
             // akkor a NetworkService osztályból hozzon létre egyetlen példányt.
             builder.RegisterType<NetworkService>()
                    .As<INetworkService>()
                    .SingleInstance();
-            // --- HOZZÁADÁS VÉGE ---
 
 
             // ===================================================================

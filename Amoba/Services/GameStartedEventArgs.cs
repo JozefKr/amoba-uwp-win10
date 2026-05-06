@@ -2,7 +2,7 @@
 
 namespace Amoba.Services
 {
-    // UGYANIDE HOZZÁADVA: Argumentum a játék elindításához szükséges adatokhoz
+    // Argumentum a játék elindításához szükséges adatokhoz
     public class GameStartedEventArgs : EventArgs
     {
         public string OpponentName { get; }

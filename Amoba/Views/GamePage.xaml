@@ -20,7 +20,7 @@
                                   TrueBrush="{StaticResource MyChatBubbleBrush}"
                                   FalseBrush="{StaticResource OpponentChatBubbleBrush}" />
 
-        <!-- FIGYELEM: A WinningBrush-t most már Page.Resources-ben definiáljuk,
+        <!-- A WinningBrush-t most már Page.Resources-ben definiáljuk,
              hogy a VSM használhassa. -->
         <SolidColorBrush x:Key="WinningBrushColor" Color="#FFD700" Opacity="0.75" />
         <SolidColorBrush x:Key="MyChatBubbleBrush" Color="{ThemeResource SystemAccentColor}"/>
@@ -134,7 +134,6 @@
     </Page.Resources>
 
     <Page.BottomAppBar>
-        <!-- Ez a rész helyes, változatlan -->
         <CommandBar Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}" 
                     Opacity="0.9"
                     ClosedDisplayMode="Compact">
@@ -290,7 +289,6 @@
                     Height="{Binding BoardSize, Converter={StaticResource placesToDimensions}}"
                     Background="{ThemeResource SystemControlBackgroundBaseMediumLowBrush}">
 
-                    <!-- ... (ItemsControl tartalma (ItemsPanel, ItemTemplate) változatlan) ... -->
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <ItemsWrapGrid
@@ -408,7 +406,7 @@
 
         </StackPanel>
 
-        <!-- A rejtett MediaElement-ek (Változatlan) -->
+        <!-- A rejtett MediaElement-ek -->
         <StackPanel Height="0" Opacity="0">
             <MediaElement x:Name="ClickSound" Source="ms-appx:///Assets/Sounds/click.mp3" AutoPlay="False" />
             <MediaElement x:Name="WinSound" Source="ms-appx:///Assets/Sounds/win.mp3" AutoPlay="False" />

@@ -11,7 +11,6 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Page.Resources>
-        <!-- ... (A konverterek és animációk (Storyboard) változatlanok) ... -->
         <conv:PlacesToDimensionsConverter x:Key="placesToDimensions"/>
         <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
